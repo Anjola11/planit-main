@@ -11,7 +11,7 @@ import { initializeFirebase } from './src/config/firebase.js';
 
   // Start server
   const server = app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 
 // Handle unhandled promise rejections

@@ -14,7 +14,7 @@ export const initializeFirebase = async () => {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });
-      console.log('✅ Firebase Admin initialized successfully (from env variable)');
+      console.log('Firebase Admin initialized successfully (from env variable)');
     } 
     // Check if service account path is provided (Local development)
     else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
@@ -23,13 +23,13 @@ export const initializeFirebase = async () => {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount.default)
       });
-      console.log('✅ Firebase Admin initialized successfully (from file)');
+      console.log('Firebase Admin initialized successfully (from file)');
     } 
     else {
       throw new Error('Firebase service account not configured. Set either FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_PATH');
     }
   } catch (error) {
-    console.error('❌ Error initializing Firebase:', error.message);
+    console.error('Error initializing Firebase:', error.message);
     console.error('Make sure Firebase credentials are properly configured');
     process.exit(1);
   }

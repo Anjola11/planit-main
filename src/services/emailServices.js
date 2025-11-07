@@ -18,9 +18,9 @@ const transporter = nodemailer.createTransport({
 // Verify transporter on startup
 transporter.verify(function(error, success) {
   if (error) {
-    console.error('❌ SMTP Configuration Error:', error);
+    console.error('SMTP Configuration Error:', error);
   } else {
-    console.log('✅ Email service is ready');
+    console.log('Email service is ready');
   }
 });
 
@@ -37,10 +37,10 @@ export async function sendEmail(to, subject, textContent) {
 
   try {
     await transporter.sendMail(message);
-    console.log(`✅ Email sent to ${to}: ${subject}`);
+    console.log(`Email sent to ${to}: ${subject}`);
     return true;
   } catch (error) {
-    console.error('❌ Error sending email:', error);
+    console.error('Error sending email:', error);
     // Don't throw error - just log it so signup can continue
     return false;
   }

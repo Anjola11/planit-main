@@ -1,5 +1,5 @@
 import { db, collections } from '../config/firebase.js';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 // User roles
 export const ROLES = {

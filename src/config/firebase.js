@@ -2,6 +2,7 @@ import admin from 'firebase-admin';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -19,9 +20,12 @@ export const initializeFirebase = async () => {
     // Check if service account path is provided (Local development)
     else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
       const serviceAccountPath = path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
-      const serviceAccount = await import(serviceAccountPath, { assert: { type: 'json' } });
+      
+     
+      const module = await import(serviceAccountPath, { assert: { type: 'json' } }); 
+      
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount.default)
+        credential: admin.credential.cert(module.default) 
       });
       console.log('Firebase Admin initialized successfully (from file)');
     } 

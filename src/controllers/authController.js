@@ -1,485 +1,441 @@
+import { User, ROLES } from '../models/User.js'; 
 import TokenManager from '../utils/tokenManager.js';
-import { User } from '../models/User.js';
-import bcrypt from 'bcrypt';
+import { sendOtpEmail, sendWelcomeEmail, sendPasswordResetEmail } from '../services/emailServices.js'; 
+import { ConflictError, AuthenticationError, NotFoundError, ValidationError } from '../middleware/errorHandler.js'; 
+import { db, collections } from '../config/firebase.js';
+/**
+ * Generate 6-digit OTP
+ */
+const generateOTP = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+};
 
-export const authenticate = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        success: false,
-        message: 'No token provided. Please authenticate.'
-      });
-    }
+/**
+ * Store OTP in database
+ */
+const storeOTP = async (userId, otp, type = 'email_verification') => {
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10 minutes expiry
 
-    const token = authHeader.split(' ')[1];
-    const decoded = TokenManager.verifyAccessToken(token);
-    const user = await User.findById(decoded.userId);
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found. Token invalid.'
-      });
-    }
-
-    if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: 'Account is deactivated. Please contact support.'
-      });
-    }
-
-    req.user = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      fullName: user.fullName
-    };
-
-    next();
-  } catch (error) {
-    if (error.message === 'Invalid or expired token') {
-      return res.status(401).json({
-        success: false,
-        message: 'Token expired or invalid. Please login again.'
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: 'Authentication failed',
-      error: error.message
+    await db().collection('otps').add({
+        userId,
+        otp,
+        type,
+        createdAt: new Date().toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        used: false
     });
-  }
 };
 
-export const optionalAuth = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      req.user = null;
-      return next();
+/**
+ * Verify OTP
+ */
+const verifyOTP = async (userId, otp, type = 'email_verification') => {
+    const snapshot = await db()
+        .collection('otps')
+        .where('userId', '==', userId)
+        .where('otp', '==', otp)
+        .where('type', '==', type)
+        .where('used', '==', false)
+        .limit(1)
+        .get();
+
+    if (snapshot.empty) {
+        return { valid: false, message: 'Invalid OTP code' };
     }
 
-    const token = authHeader.split(' ')[1];
-    const decoded = TokenManager.verifyAccessToken(token);
-    const user = await User.findById(decoded.userId);
+    const otpDoc = snapshot.docs[0];
+    const otpData = otpDoc.data();
+    const expiresAt = new Date(otpData.expiresAt);
 
-    if (user && user.isActive) {
-      req.user = {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        fullName: user.fullName
-      };
-    } else {
-      req.user = null;
+    if (expiresAt < new Date()) {
+        return { valid: false, message: 'OTP code has expired' };
     }
 
-    next();
-  } catch (error) {
-    req.user = null;
-    next();
-  }
+    // Mark OTP as used
+    await otpDoc.ref.update({ used: true });
+
+    return { valid: true };
 };
 
-export const register = async (req, res) => {
-  try {
-    const { email, password, fullName } = req.body;
+/**
+ * @desc    Register a new user
+ * @route   POST /api/auth/signup
+ * @access  Public
+ */
+export const signup = async (req, res) => { 
+    const { email, password, fullName, role, phoneNumber, profilePicture } = req.body;
 
-    if (!email || !password || !fullName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide email, password, and full name'
-      });
-    }
-
-    const existingUser = await User.findOne({ email });
+    // Check if user already exists
+    const existingUser = await User.findByEmail(email);
     if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: 'User with this email already exists'
-      });
+        throw new ConflictError('User with this email already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
+    // Create user
     const user = await User.create({
-      email,
-      password: hashedPassword,
-      fullName,
-      role: 'user',
-      isActive: true
+        email,
+        password,
+        fullName,
+        role: role || ROLES.PLANNER,
+        phoneNumber
     });
 
-    const accessToken = TokenManager.generateAccessToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role
-    });
-
-    const refreshToken = TokenManager.generateRefreshToken({
-      userId: user.id
-    });
+    // Generate and send OTP
+    const otp = generateOTP();
+    await storeOTP(user.id, otp);
+    await sendOtpEmail(email, otp, fullName);
 
     res.status(201).json({
-      success: true,
-      message: 'User registered successfully',
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          fullName: user.fullName,
-          role: user.role
-        },
-        accessToken,
-        refreshToken
-      }
+        success: true,
+        message: 'User registered successfully. Please check your email for verification code.',
+        data: {
+            userId: user.id,
+            email: user.email,
+            emailVerified: false
+        }
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Registration failed',
-      error: error.message
-    });
-  }
 };
 
-export const login = async (req, res) => {
-  try {
+/**
+ * @desc    Verify email with OTP
+ * @route   POST /api/auth/verify-email
+ * @access  Public
+ */
+export const verifyEmail = async (req, res) => { 
+    const { userId, otp } = req.body;
+
+    // Verify OTP
+    const verification = await verifyOTP(userId, otp);
+
+    if (!verification.valid) {
+        throw new ValidationError(verification.message);
+    }
+
+    // Update user's email verification status
+    await User.update(userId, { emailVerified: true });
+
+    // Get updated user
+    const user = await User.findById(userId);
+
+    // Send welcome email
+    await sendWelcomeEmail(user.email, user.fullName);
+
+    // Generate tokens
+    const { accessToken, refreshToken } = TokenManager.generateTokens(user);
+
+    // Store refresh token
+    await TokenManager.storeRefreshToken(user.id, refreshToken);
+
+    res.status(200).json({
+        success: true,
+        message: 'Email verified successfully',
+        data: {
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role,
+                phoneNumber: user.phoneNumber,
+                emailVerified: user.emailVerified
+            },
+            accessToken,
+            refreshToken
+        }
+    });
+};
+
+/**
+ * @desc    Resend verification OTP
+ * @route   POST /api/auth/resend-otp
+ * @access  Public
+ */
+export const resendOTP = async (req, res) => { 
+    const { userId } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+        throw new NotFoundError('User not found');
+    }
+
+    if (user.emailVerified) {
+        throw new ValidationError('Email is already verified');
+    }
+
+    // Generate and send new OTP
+    const otp = generateOTP();
+    await storeOTP(user.id, otp);
+    await sendOtpEmail(user.email, otp, user.fullName);
+
+    res.status(200).json({
+        success: true,
+        message: 'Verification code sent successfully'
+    });
+};
+
+/**
+ * @desc    Login user
+ * @route   POST /api/auth/login
+ * @access  Public
+ */
+export const login = async (req, res) => { 
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide email and password'
-      });
-    }
-
-    const user = await User.findOne({ email }).select('+password');
+    // Find user
+    const user = await User.findByEmail(email);
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
+        throw new AuthenticationError('Invalid email or password');
     }
 
+    // Check if account is active
     if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: 'Account is deactivated. Please contact support.'
-      });
+        throw new AuthenticationError('Account is deactivated. Please contact support.');
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    // Verify password
+    const isPasswordValid = await User.verifyPassword(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
+        throw new AuthenticationError('Invalid email or password');
     }
 
-    const accessToken = TokenManager.generateAccessToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role
-    });
+    // Check if email is verified
+    if (!user.emailVerified) {
+        throw new AuthenticationError('Please verify your email before logging in');
+    }
 
-    const refreshToken = TokenManager.generateRefreshToken({
-      userId: user.id
-    });
+    // Generate tokens
+    const { accessToken, refreshToken } = TokenManager.generateTokens(user);
+
+    // Store refresh token
+    await TokenManager.storeRefreshToken(user.id, refreshToken);
 
     res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          fullName: user.fullName,
-          role: user.role
-        },
-        accessToken,
-        refreshToken
-      }
+        success: true,
+        message: 'Login successful',
+        data: {
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role,
+                phoneNumber: user.phoneNumber
+            },
+            accessToken,
+            refreshToken
+        }
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Login failed',
-      error: error.message
-    });
-  }
 };
 
-export const changePassword = async (req, res) => {
-  try {
-    const { oldPassword, newPassword } = req.body;
-    const userId = req.user.id;
-
-    if (!oldPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide old and new password'
-      });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'New password must be at least 6 characters long'
-      });
-    }
-
-    const user = await User.findById(userId).select('+password');
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Old password is incorrect'
-      });
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Password changed successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to change password',
-      error: error.message
-    });
-  }
-};
-
-export const refreshToken = async (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (!refreshToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'Refresh token is required'
-      });
-    }
-
-    const decoded = TokenManager.verifyRefreshToken(refreshToken);
-    const user = await User.findById(decoded.userId);
-    
-    if (!user || !user.isActive) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid refresh token'
-      });
-    }
-
-    const accessToken = TokenManager.generateAccessToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Token refreshed successfully',
-      data: {
-        accessToken
-      }
-    });
-  } catch (error) {
-    res.status(401).json({
-      success: false,
-      message: 'Invalid or expired refresh token'
-    });
-  }
-};
-
-export const logout = async (req, res) => {
-  try {
-    res.status(200).json({
-      success: true,
-      message: 'Logged out successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Logout failed',
-      error: error.message
-    });
-  }
-};
-
-export const forgotPassword = async (req, res) => {
-  try {
+/**
+ * @desc    Request password reset
+ * @route   POST /api/auth/forgot-password
+ * @access  Public
+ */
+export const forgotPassword = async (req, res) => { 
     const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide email address'
-      });
+    const user = await User.findByEmail(email);
+    if (!user) {
+        // Don't reveal if user exists
+        return res.status(200).json({
+            success: true,
+            message: 'If an account exists with this email, a password reset code has been sent.'
+        });
     }
 
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(200).json({
+    // Generate and send reset code
+    const resetCode = generateOTP();
+    await storeOTP(user.id, resetCode, 'password_reset');
+    await sendPasswordResetEmail(user.email, resetCode);
+
+    res.status(200).json({
         success: true,
-        message: 'If an account exists with this email, a password reset link will be sent'
-      });
-    }
-
-    const resetToken = TokenManager.generateAccessToken({
-      userId: user.id,
-      email: user.email,
-      purpose: 'password-reset'
+        message: 'Password reset code sent to your email'
     });
-
-    res.status(200).json({
-      success: true,
-      message: 'Password reset link sent to your email',
-      resetToken
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process password reset request',
-      error: error.message
-    });
-  }
 };
 
-export const resetPassword = async (req, res) => {
-  try {
-    const { token, newPassword } = req.body;
+/**
+ * @desc    Reset password with code
+ * @route   POST /api/auth/reset-password
+ * @access  Public
+ */
+export const resetPassword = async (req, res) => { 
+    const { email, resetCode, newPassword } = req.body;
 
-    if (!token || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide token and new password'
-      });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters long'
-      });
-    }
-
-    const decoded = TokenManager.verifyAccessToken(token);
-    
-    if (decoded.purpose !== 'password-reset') {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid reset token'
-      });
-    }
-
-    const user = await User.findById(decoded.userId);
+    const user = await User.findByEmail(email);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+        throw new NotFoundError('User not found');
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    await user.save();
+    // Verify reset code
+    const verification = await verifyOTP(user.id, resetCode, 'password_reset');
+
+    if (!verification.valid) {
+        throw new ValidationError(verification.message);
+    }
+
+    // Update password
+    await User.updatePassword(user.id, newPassword);
+
+    // Revoke all refresh tokens
+    await TokenManager.revokeAllUserTokens(user.id);
 
     res.status(200).json({
-      success: true,
-      message: 'Password reset successfully'
+        success: true,
+        message: 'Password reset successfully. Please login with your new password.'
     });
-  } catch (error) {
-    res.status(401).json({
-      success: false,
-      message: 'Invalid or expired reset token'
-    });
-  }
 };
 
+/**
+ * @desc    Refresh access token
+ * @route   POST /api/auth/refresh
+ * @access  Public
+ */
+export const refreshToken = async (req, res) => { 
+    const { refreshToken } = req.body;
 
-export const getProfile = async (req, res) => {
-    try {
-        
-        const user = await User.findById(req.user.id); 
+    // Verify refresh token
+    const decoded = TokenManager.verifyRefreshToken(refreshToken);
 
-        if (!user) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'User profile not found' 
-            });
-        }
-        
-        res.status(200).json({
-            success: true,
-            message: 'User profile retrieved successfully',
-            data: {
-                id: user.id,
-                email: user.email,
-                fullName: user.fullName,
-                role: user.role
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            message: 'Failed to retrieve profile', 
-            error: error.message 
-        });
+    // Check if token exists in database
+    const isValid = await TokenManager.isRefreshTokenValid(refreshToken);
+    if (!isValid) {
+        throw new AuthenticationError('Invalid or expired refresh token');
     }
+
+    // Get user
+    const user = await User.findById(decoded.userId);
+    if (!user || !user.isActive) {
+        throw new AuthenticationError('User not found or inactive');
+    }
+
+    // Generate new tokens
+    const tokens = TokenManager.generateTokens(user);
+
+    // Store new refresh token and revoke old one
+    await TokenManager.revokeRefreshToken(refreshToken);
+    await TokenManager.storeRefreshToken(user.id, tokens.refreshToken);
+
+    res.status(200).json({
+        success: true,
+        message: 'Token refreshed successfully',
+        data: {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken
+        }
+    });
 };
 
+/**
+ * @desc    Logout user
+ * @route   POST /api/auth/logout
+ * @access  Private
+ */
+export const logout = async (req, res) => { 
+    const { refreshToken } = req.body;
 
-export const updateProfile = async (req, res) => {
-    try {
-        const { fullName, ...updates } = req.body;
-        const userId = req.user.id;
-
-        const updateFields = {};
-        if (fullName) updateFields.fullName = fullName;
-        
-
-        if (Object.keys(updateFields).length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No valid fields provided for update'
-            });
-        }
-
-        const user = await User.findByIdAndUpdate(userId, updateFields, { new: true, runValidators: true });
-
-        res.status(200).json({
-            success: true,
-            message: 'Profile updated successfully',
-            data: {
-                id: user.id,
-                email: user.email,
-                fullName: user.fullName,
-                role: user.role
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            message: 'Failed to update profile', 
-            error: error.message 
-        });
+    if (refreshToken) {
+        await TokenManager.revokeRefreshToken(refreshToken);
     }
+
+    res.status(200).json({
+        success: true,
+        message: 'Logged out successfully'
+    });
+};
+
+/**
+ * @desc    Logout from all devices
+ * @route   POST /api/auth/logout-all
+ * @access  Private
+ */
+export const logoutAll = async (req, res) => { 
+    await TokenManager.revokeAllUserTokens(req.user.id);
+
+    res.status(200).json({
+        success: true,
+        message: 'Logged out from all devices successfully'
+    });
+};
+
+/**
+ * @desc    Get current user profile
+ * @route   GET /api/auth/me
+ * @access  Private
+ */
+export const getProfile = async (req, res) => { 
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+        throw new NotFoundError('User not found');
+    }
+
+    res.status(200).json({
+        success: true,
+        data: {
+            id: user.id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role,
+            phoneNumber: user.phoneNumber,
+            emailVerified: user.emailVerified,
+            createdAt: user.createdAt
+        }
+    });
+};
+
+/**
+ * @desc    Update user profile
+ * @route   PUT /api/auth/profile
+ * @access  Private
+ */
+export const updateProfile = async (req, res) => { 
+    const { fullName, phoneNumber } = req.body;
+
+    const updates = {};
+    if (fullName) updates.fullName = fullName;
+    if (phoneNumber) updates.phoneNumber = phoneNumber;
+
+    const user = await User.update(req.user.id, updates);
+
+    res.status(200).json({
+        success: true,
+        message: 'Profile updated successfully',
+        data: {
+            id: user.id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role,
+            phoneNumber: user.phoneNumber
+        }
+    });
+};
+
+/**
+ * @desc    Change password
+ * @route   PUT /api/auth/change-password
+ * @access  Private
+ */
+export const changePassword = async (req, res) => { 
+    const { currentPassword, newPassword } = req.body;
+
+    // Get user with password
+    const user = await User.findById(req.user.id);
+
+    // Verify current password
+    const isValid = await User.verifyPassword(currentPassword, user.password);
+    if (!isValid) {
+        throw new AuthenticationError('Current password is incorrect');
+    }
+
+    // Update password
+    await User.updatePassword(req.user.id, newPassword);
+
+    // Revoke all refresh tokens (force re-login on all devices)
+    await TokenManager.revokeAllUserTokens(req.user.id);
+
+    res.status(200).json({
+        success: true,
+        message: 'Password changed successfully. Please login again.'
+    });
 };

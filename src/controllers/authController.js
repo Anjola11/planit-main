@@ -413,3 +413,73 @@ export const resetPassword = async (req, res) => {
     });
   }
 };
+
+
+export const getProfile = async (req, res) => {
+    try {
+        
+        const user = await User.findById(req.user.id); 
+
+        if (!user) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'User profile not found' 
+            });
+        }
+        
+        res.status(200).json({
+            success: true,
+            message: 'User profile retrieved successfully',
+            data: {
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to retrieve profile', 
+            error: error.message 
+        });
+    }
+};
+
+
+export const updateProfile = async (req, res) => {
+    try {
+        const { fullName, ...updates } = req.body;
+        const userId = req.user.id;
+
+        const updateFields = {};
+        if (fullName) updateFields.fullName = fullName;
+        
+
+        if (Object.keys(updateFields).length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid fields provided for update'
+            });
+        }
+
+        const user = await User.findByIdAndUpdate(userId, updateFields, { new: true, runValidators: true });
+
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: {
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to update profile', 
+            error: error.message 
+        });
+    }
+};

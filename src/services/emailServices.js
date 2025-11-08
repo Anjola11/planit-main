@@ -6,36 +6,40 @@ import ejs from 'ejs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Validate essential environment variables early
+// Get environment variables with defaults
 const { SMTP_USER, SMTP_PASS } = process.env;
-if (!SMTP_USER || !SMTP_PASS) {
-  throw new Error('SMTP_USER and SMTP_PASS environment variables must be set');
+
+// Create transporter (even if credentials are missing, for graceful degradation)
+let transporter = null;
+
+if (SMTP_USER && SMTP_PASS) {
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    debug: false, // Set to false in production
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+  });
+
+  // Verify transporter on startup (non-blocking)
+  transporter.verify((error) => {
+    if (error) {
+      console.error('SMTP Configuration Error:', error);
+      console.log('Email functionality will be disabled');
+    } else {
+      console.log('Email service is ready');
+    }
+  });
+} else {
+  console.warn('SMTP credentials not configured. Email functionality will be disabled.');
 }
-
-// Create transporter with better timeout and secure TLS settings
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS,
-  },
-  host: 'smtp.gmail.com',
-  port: 587, // Use STARTTLS port
-  secure: false, // For port 587, secure should be false to enable STARTTLS
-  requireTLS: true, // Force use of STARTTLS
-  debug: true,
-  connectionTimeout: 15000,
-  greetingTimeout: 15000,
-});
-
-// Verify transporter on startup
-transporter.verify((error) => {
-  if (error) {
-    console.error('SMTP Configuration Error:', error);
-  } else {
-    console.log('Email service is ready');
-  }
-});
 
 /**
  * Render email template with EJS
@@ -54,6 +58,12 @@ async function renderTemplate(templateName, payload = {}) {
  * General function to send emails
  */
 async function sendEmail(to, subject, html, text) {
+  // Check if transporter is available
+  if (!transporter) {
+    console.warn('Email service not configured. Skipping email to:', to);
+    return false;
+  }
+
   const message = {
     from: `Planit <${SMTP_USER}>`,
     to,
@@ -68,7 +78,6 @@ async function sendEmail(to, subject, html, text) {
     return true;
   } catch (error) {
     console.error('Error sending email:', error);
-    // Optionally implement retry logic here
     return false;
   }
 }
@@ -84,9 +93,13 @@ export async function sendOtpEmail(userEmail, otpCode, userName) {
   });
 
   const textContent = `Hello ${userName},
+
 Your Planit verification code is: ${otpCode}
+
 This code will expire in 10 minutes. Please do not share this code with anyone.
+
 If you didn't request this code, please ignore this email.
+
 Best regards,
 The Planit Team`;
 
@@ -103,8 +116,11 @@ export async function sendWelcomeEmail(userEmail, userName) {
   });
 
   const textContent = `Welcome to Planit, ${userName}!
+
 Thank you for verifying your email. We're excited to have you on board!
+
 Planit helps you manage events, tasks, and everything in between. Get started by exploring our features.
+
 Best regards,
 The Planit Team`;
 
@@ -121,9 +137,13 @@ export async function sendPasswordResetEmail(userEmail, resetCode) {
   });
 
   const textContent = `Hello,
+
 We received a password reset request for your Planit account.
+
 Your password reset code is: ${resetCode}
+
 This code will expire in 10 minutes. If you didn't request this, please ignore this email.
+
 Best regards,
 The Planit Team`;
 

@@ -8,7 +8,10 @@ export const ROLES = {
   ADMIN: 'admin'
 };
 
-export class User {
+/**
+ * Base User class with common functionality
+ */
+export class BaseUser {
   /**
    * Create a new user in Firestore
    */
@@ -18,13 +21,14 @@ export class User {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
     
+    // Base user fields
     const user = {
       email: email.toLowerCase(),
       password: hashedPassword,
       fullName,
       role: role || ROLES.PLANNER,
       phoneNumber: phoneNumber || null,
-      profilePicture: profilePicture || null, // NEW: Profile picture URL
+      profilePicture: profilePicture || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       isActive: true,

@@ -1,4 +1,4 @@
-import { ROLES } from '../models/User.js';
+import { ROLES } from '../models/baseUser.js';
 
 /**
  * Middleware to check if user has required role(s)

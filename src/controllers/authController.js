@@ -1,8 +1,11 @@
-import { User, ROLES } from '../models/User.js'; 
+import { BaseUser, ROLES } from '../models/baseUser.js';
+import { Vendor } from '../models/vendor.js';
+import { Planner } from '../models/planner.js';
 import TokenManager from '../utils/tokenManager.js';
-import { sendOtpEmail, sendWelcomeEmail, sendPasswordResetEmail } from '../services/emailServices.js'; 
-import { ConflictError, AuthenticationError, NotFoundError, ValidationError } from '../middleware/errorHandler.js'; 
+import { sendOtpEmail, sendWelcomeEmail, sendPasswordResetEmail } from '../services/emailServices.js';
+import { ConflictError, AuthenticationError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { db, collections } from '../config/firebase.js';
+
 /**
  * Generate 6-digit OTP
  */
@@ -15,7 +18,7 @@ const generateOTP = () => {
  */
 const storeOTP = async (userId, otp, type = 'email_verification') => {
     const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10 minutes expiry
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
     await db().collection('otps').add({
         userId,
@@ -52,39 +55,40 @@ const verifyOTP = async (userId, otp, type = 'email_verification') => {
         return { valid: false, message: 'OTP code has expired' };
     }
 
-    // Mark OTP as used
     await otpDoc.ref.update({ used: true });
 
     return { valid: true };
 };
 
 /**
- * @desc    Register a new user
+ * @desc    Register a new user (role-based)
  * @route   POST /api/auth/signup
  * @access  Public
  */
-export const signup = async (req, res) => { 
-    const { email, password, fullName, role, phoneNumber, profilePicture } = req.body;
+export const signup = async (req, res) => {
+    const { email, role, ...userData } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findByEmail(email);
+    const existingUser = await BaseUser.findByEmail(email);
     if (existingUser) {
         throw new ConflictError('User with this email already exists');
     }
 
-    // Create user
-    const user = await User.create({
-        email,
-        password,
-        fullName,
-        role: role || ROLES.PLANNER,
-        phoneNumber
-    });
+    let user;
+
+    // Create user based on role
+    if (role === ROLES.VENDOR) {
+        user = await Vendor.create({ email, role, ...userData });
+    } else if (role === ROLES.PLANNER || !role) {
+        user = await Planner.create({ email, role, ...userData });
+    } else {
+        throw new ValidationError('Invalid role specified');
+    }
 
     // Generate and send OTP
     const otp = generateOTP();
     await storeOTP(user.id, otp);
-    await sendOtpEmail(email, otp, fullName);
+    await sendOtpEmail(email, otp, userData.fullName);
 
     res.status(201).json({
         success: true,
@@ -92,6 +96,7 @@ export const signup = async (req, res) => {
         data: {
             userId: user.id,
             email: user.email,
+            role: user.role,
             emailVerified: false
         }
     });
@@ -102,29 +107,23 @@ export const signup = async (req, res) => {
  * @route   POST /api/auth/verify-email
  * @access  Public
  */
-export const verifyEmail = async (req, res) => { 
+export const verifyEmail = async (req, res) => {
     const { userId, otp } = req.body;
 
-    // Verify OTP
     const verification = await verifyOTP(userId, otp);
 
     if (!verification.valid) {
         throw new ValidationError(verification.message);
     }
 
-    // Update user's email verification status
-    await User.update(userId, { emailVerified: true });
+    await BaseUser.update(userId, { emailVerified: true });
 
-    // Get updated user
-    const user = await User.findById(userId);
+    const user = await BaseUser.findById(userId);
 
-    // Send welcome email
     await sendWelcomeEmail(user.email, user.fullName);
 
-    // Generate tokens
     const { accessToken, refreshToken } = TokenManager.generateTokens(user);
 
-    // Store refresh token
     await TokenManager.storeRefreshToken(user.id, refreshToken);
 
     res.status(200).json({
@@ -150,10 +149,10 @@ export const verifyEmail = async (req, res) => {
  * @route   POST /api/auth/resend-otp
  * @access  Public
  */
-export const resendOTP = async (req, res) => { 
+export const resendOTP = async (req, res) => {
     const { userId } = req.body;
 
-    const user = await User.findById(userId);
+    const user = await BaseUser.findById(userId);
     if (!user) {
         throw new NotFoundError('User not found');
     }
@@ -162,7 +161,6 @@ export const resendOTP = async (req, res) => {
         throw new ValidationError('Email is already verified');
     }
 
-    // Generate and send new OTP
     const otp = generateOTP();
     await storeOTP(user.id, otp);
     await sendOtpEmail(user.email, otp, user.fullName);
@@ -178,35 +176,29 @@ export const resendOTP = async (req, res) => {
  * @route   POST /api/auth/login
  * @access  Public
  */
-export const login = async (req, res) => { 
+export const login = async (req, res) => {
     const { email, password } = req.body;
 
-    // Find user
-    const user = await User.findByEmail(email);
+    const user = await BaseUser.findByEmail(email);
     if (!user) {
         throw new AuthenticationError('Invalid email or password');
     }
 
-    // Check if account is active
     if (!user.isActive) {
         throw new AuthenticationError('Account is deactivated. Please contact support.');
     }
 
-    // Verify password
-    const isPasswordValid = await User.verifyPassword(password, user.password);
+    const isPasswordValid = await BaseUser.verifyPassword(password, user.password);
     if (!isPasswordValid) {
         throw new AuthenticationError('Invalid email or password');
     }
 
-    // Check if email is verified
     if (!user.emailVerified) {
         throw new AuthenticationError('Please verify your email before logging in');
     }
 
-    // Generate tokens
     const { accessToken, refreshToken } = TokenManager.generateTokens(user);
 
-    // Store refresh token
     await TokenManager.storeRefreshToken(user.id, refreshToken);
 
     res.status(200).json({
@@ -231,19 +223,17 @@ export const login = async (req, res) => {
  * @route   POST /api/auth/forgot-password
  * @access  Public
  */
-export const forgotPassword = async (req, res) => { 
+export const forgotPassword = async (req, res) => {
     const { email } = req.body;
 
-    const user = await User.findByEmail(email);
+    const user = await BaseUser.findByEmail(email);
     if (!user) {
-        // Don't reveal if user exists
         return res.status(200).json({
             success: true,
             message: 'If an account exists with this email, a password reset code has been sent.'
         });
     }
 
-    // Generate and send reset code
     const resetCode = generateOTP();
     await storeOTP(user.id, resetCode, 'password_reset');
     await sendPasswordResetEmail(user.email, resetCode);
@@ -259,25 +249,22 @@ export const forgotPassword = async (req, res) => {
  * @route   POST /api/auth/reset-password
  * @access  Public
  */
-export const resetPassword = async (req, res) => { 
+export const resetPassword = async (req, res) => {
     const { email, resetCode, newPassword } = req.body;
 
-    const user = await User.findByEmail(email);
+    const user = await BaseUser.findByEmail(email);
     if (!user) {
         throw new NotFoundError('User not found');
     }
 
-    // Verify reset code
     const verification = await verifyOTP(user.id, resetCode, 'password_reset');
 
     if (!verification.valid) {
         throw new ValidationError(verification.message);
     }
 
-    // Update password
-    await User.updatePassword(user.id, newPassword);
+    await BaseUser.updatePassword(user.id, newPassword);
 
-    // Revoke all refresh tokens
     await TokenManager.revokeAllUserTokens(user.id);
 
     res.status(200).json({
@@ -291,28 +278,23 @@ export const resetPassword = async (req, res) => {
  * @route   POST /api/auth/refresh
  * @access  Public
  */
-export const refreshToken = async (req, res) => { 
+export const refreshToken = async (req, res) => {
     const { refreshToken } = req.body;
 
-    // Verify refresh token
     const decoded = TokenManager.verifyRefreshToken(refreshToken);
 
-    // Check if token exists in database
     const isValid = await TokenManager.isRefreshTokenValid(refreshToken);
     if (!isValid) {
         throw new AuthenticationError('Invalid or expired refresh token');
     }
 
-    // Get user
-    const user = await User.findById(decoded.userId);
+    const user = await BaseUser.findById(decoded.userId);
     if (!user || !user.isActive) {
         throw new AuthenticationError('User not found or inactive');
     }
 
-    // Generate new tokens
     const tokens = TokenManager.generateTokens(user);
 
-    // Store new refresh token and revoke old one
     await TokenManager.revokeRefreshToken(refreshToken);
     await TokenManager.storeRefreshToken(user.id, tokens.refreshToken);
 
@@ -331,7 +313,7 @@ export const refreshToken = async (req, res) => {
  * @route   POST /api/auth/logout
  * @access  Private
  */
-export const logout = async (req, res) => { 
+export const logout = async (req, res) => {
     const { refreshToken } = req.body;
 
     if (refreshToken) {
@@ -349,7 +331,7 @@ export const logout = async (req, res) => {
  * @route   POST /api/auth/logout-all
  * @access  Private
  */
-export const logoutAll = async (req, res) => { 
+export const logoutAll = async (req, res) => {
     await TokenManager.revokeAllUserTokens(req.user.id);
 
     res.status(200).json({
@@ -363,51 +345,51 @@ export const logoutAll = async (req, res) => {
  * @route   GET /api/auth/me
  * @access  Private
  */
-export const getProfile = async (req, res) => { 
-    const user = await User.findById(req.user.id);
+export const getProfile = async (req, res) => {
+    const user = await BaseUser.findById(req.user.id);
 
     if (!user) {
         throw new NotFoundError('User not found');
     }
 
+    // Remove sensitive data
+    const { password, ...userProfile } = user;
+
     res.status(200).json({
         success: true,
-        data: {
-            id: user.id,
-            email: user.email,
-            fullName: user.fullName,
-            role: user.role,
-            phoneNumber: user.phoneNumber,
-            emailVerified: user.emailVerified,
-            createdAt: user.createdAt
-        }
+        data: userProfile
     });
 };
 
 /**
- * @desc    Update user profile
+ * @desc    Update user profile (role-based)
  * @route   PUT /api/auth/profile
  * @access  Private
  */
-export const updateProfile = async (req, res) => { 
-    const { fullName, phoneNumber } = req.body;
+export const updateProfile = async (req, res) => {
+    const user = await BaseUser.findById(req.user.id);
 
-    const updates = {};
-    if (fullName) updates.fullName = fullName;
-    if (phoneNumber) updates.phoneNumber = phoneNumber;
+    if (!user) {
+        throw new NotFoundError('User not found');
+    }
 
-    const user = await User.update(req.user.id, updates);
+    let updatedUser;
+
+    // Update based on role
+    if (user.role === ROLES.VENDOR) {
+        updatedUser = await Vendor.updateProfile(req.user.id, req.body);
+    } else if (user.role === ROLES.PLANNER) {
+        updatedUser = await Planner.updateProfile(req.user.id, req.body);
+    } else {
+        updatedUser = await BaseUser.update(req.user.id, req.body);
+    }
+
+    const { password, ...userProfile } = updatedUser;
 
     res.status(200).json({
         success: true,
         message: 'Profile updated successfully',
-        data: {
-            id: user.id,
-            email: user.email,
-            fullName: user.fullName,
-            role: user.role,
-            phoneNumber: user.phoneNumber
-        }
+        data: userProfile
     });
 };
 
@@ -416,22 +398,18 @@ export const updateProfile = async (req, res) => {
  * @route   PUT /api/auth/change-password
  * @access  Private
  */
-export const changePassword = async (req, res) => { 
+export const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
-    // Get user with password
-    const user = await User.findById(req.user.id);
+    const user = await BaseUser.findById(req.user.id);
 
-    // Verify current password
-    const isValid = await User.verifyPassword(currentPassword, user.password);
+    const isValid = await BaseUser.verifyPassword(currentPassword, user.password);
     if (!isValid) {
         throw new AuthenticationError('Current password is incorrect');
     }
 
-    // Update password
-    await User.updatePassword(req.user.id, newPassword);
+    await BaseUser.updatePassword(req.user.id, newPassword);
 
-    // Revoke all refresh tokens (force re-login on all devices)
     await TokenManager.revokeAllUserTokens(req.user.id);
 
     res.status(200).json({

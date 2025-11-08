@@ -1,7 +1,7 @@
 import { body, validationResult } from 'express-validator';
-import { ROLES } from '../models/User.js';
+import { ROLES } from '../models/BaseUser.js';
 
-// Validation middleware for signup
+// Validation middleware for signup (basic fields only)
 export const signupValidation = [
   body('email')
     .isEmail()
@@ -33,6 +33,111 @@ export const signupValidation = [
     .optional()
     .isURL()
     .withMessage('Profile picture must be a valid URL')
+];
+
+// Validation for vendor profile update (extended fields)
+export const vendorProfileUpdateValidation = [
+  body('businessName')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Business name must be between 2 and 100 characters'),
+  
+  body('businessDescription')
+    .optional()
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage('Business description must not exceed 1000 characters'),
+  
+  body('category')
+    .optional()
+    .isIn(['catering', 'photography', 'videography', 'venue', 'decoration', 'music', 'entertainment', 'planning', 'other'])
+    .withMessage('Invalid category'),
+  
+  body('location')
+    .optional()
+    .trim(),
+  
+  body('address.street')
+    .optional()
+    .trim(),
+  
+  body('address.city')
+    .optional()
+    .trim(),
+  
+  body('address.state')
+    .optional()
+    .trim(),
+  
+  body('address.country')
+    .optional()
+    .trim(),
+  
+  body('address.zipCode')
+    .optional()
+    .trim(),
+  
+  body('cacNumber')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .withMessage('CAC number must be between 2 and 50 characters'),
+  
+  body('cacDocument')
+    .optional()
+    .isURL()
+    .withMessage('CAC document must be a valid URL'),
+  
+  body('website')
+    .optional()
+    .isURL()
+    .withMessage('Website must be a valid URL'),
+  
+  body('socialMedia.facebook')
+    .optional()
+    .isURL()
+    .withMessage('Facebook URL must be valid'),
+  
+  body('socialMedia.instagram')
+    .optional()
+    .isURL()
+    .withMessage('Instagram URL must be valid'),
+  
+  body('socialMedia.twitter')
+    .optional()
+    .isURL()
+    .withMessage('Twitter URL must be valid'),
+  
+  body('socialMedia.linkedin')
+    .optional()
+    .isURL()
+    .withMessage('LinkedIn URL must be valid'),
+  
+  body('services')
+    .optional()
+    .isArray()
+    .withMessage('Services must be an array'),
+  
+  body('priceRange.min')
+    .optional()
+    .isNumeric()
+    .withMessage('Minimum price must be a number'),
+  
+  body('priceRange.max')
+    .optional()
+    .isNumeric()
+    .withMessage('Maximum price must be a number'),
+  
+  body('priceRange.currency')
+    .optional()
+    .isIn(['NGN', 'USD', 'GBP', 'EUR'])
+    .withMessage('Invalid currency'),
+  
+  body('availability')
+    .optional()
+    .isBoolean()
+    .withMessage('Availability must be a boolean')
 ];
 
 // Validation middleware for email verification

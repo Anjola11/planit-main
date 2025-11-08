@@ -1,5 +1,5 @@
 import { body, validationResult } from 'express-validator';
-import { ROLES } from '../models/BaseUser.js';
+import { ROLES } from '../models/baseUser.js';
 
 // Validation middleware for signup (basic fields only)
 export const signupValidation = [

@@ -1,5 +1,5 @@
 import { db, collections } from '../config/firebase.js';
-import { BaseUser, ROLES } from './baseUser.js';
+import BaseUser, { ROLES } from './baseUser.js'; 
 
 /**
  * Planner class with planner-specific functionality

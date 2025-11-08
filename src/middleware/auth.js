@@ -1,5 +1,5 @@
 import TokenManager from '../utils/tokenManager.js';
-import { BaseUser } from '../models/BaseUser.js'; // Changed from User to BaseUser
+import { BaseUser } from '../models/baseUser.js'; // Changed from User to BaseUser
 
 /**
  * Middleware to verify JWT token and authenticate user

@@ -32,7 +32,7 @@ export class BaseUser {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       isActive: true,
-      emailVerified: true
+      emailVerified: false
     };
 
     const userRef = await db().collection(collections.USERS).add(user);

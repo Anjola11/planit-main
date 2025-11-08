@@ -1,6 +1,5 @@
 import TokenManager from '../utils/tokenManager.js';
-import { BaseUser } from '../models/baseUser.js'; // Changed from User to BaseUser
-
+import { BaseUser } from '../models/baseUser.js'; 
 /**
  * Middleware to verify JWT token and authenticate user
  */
@@ -20,7 +19,7 @@ export const authenticate = async (req, res, next) => {
     // Verify token
     const decoded = TokenManager.verifyAccessToken(token);
     // Get user from database
-    const user = await BaseUser.findById(decoded.userId); // Changed from User to BaseUser
+    const user = await BaseUser.findById(decoded.userId); 
     if (!user) {
       return res.status(401).json({
         success: false,

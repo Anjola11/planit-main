@@ -1,5 +1,5 @@
 import { db, collections } from '../config/firebase.js';
-import { BaseUser, ROLES } from './BaseUser.js';
+import { BaseUser, ROLES } from './baseUser.js';
 
 /**
  * Vendor class with vendor-specific functionality

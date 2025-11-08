@@ -1,9 +1,9 @@
 import { db, collections } from '../config/firebase.js';
-import { BaseUser, ROLES } from './baseUser.js';
+import BaseUser, { ROLES } from './baseUser.js'; 
 
 /**
- * Vendor class with vendor-specific functionality
- */
+ * Vendor class with vendor-specific functionality
+ */
 export class Vendor extends BaseUser {
   /**
    * Create a new vendor (minimal fields required at signup)

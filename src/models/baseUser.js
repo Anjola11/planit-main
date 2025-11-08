@@ -5,23 +5,24 @@ import bcrypt from 'bcrypt';
 export const ROLES = {
   PLANNER: 'planner',
   VENDOR: 'vendor',
-  ADMIN: 'admin'
+  ADMIN: 'admin',
 };
 
 /**
- * Base User class with common functionality
+ * Base User class with common functionality for Firestore users
  */
-export class BaseUser {
+export default class BaseUser {
   /**
    * Create a new user in Firestore
+   * @param {object} userData
+   * @returns {object} newly created user (without password)
    */
   static async create(userData) {
     const { email, password, fullName, role, phoneNumber, profilePicture } = userData;
-    
-    // Hash password
+
+    // Hash password securely
     const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // Base user fields
+
     const user = {
       email: email.toLowerCase(),
       password: hashedPassword,
@@ -32,20 +33,18 @@ export class BaseUser {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       isActive: true,
-      emailVerified: false
+      emailVerified: false,
     };
 
     const userRef = await db().collection(collections.USERS).add(user);
-    
-    return {
-      id: userRef.id,
-      ...user,
-      password: undefined // Don't return password
-    };
+
+    return this._sanitizeUser({ id: userRef.id, ...user });
   }
 
   /**
    * Find user by email
+   * @param {string} email
+   * @returns {object|null} user object without password or null if not found
    */
   static async findByEmail(email) {
     const snapshot = await db()
@@ -54,74 +53,74 @@ export class BaseUser {
       .limit(1)
       .get();
 
-    if (snapshot.empty) {
-      return null;
-    }
+    if (snapshot.empty) return null;
 
     const doc = snapshot.docs[0];
-    return {
-      id: doc.id,
-      ...doc.data()
-    };
+    return this._sanitizeUser({ id: doc.id, ...doc.data() });
   }
 
   /**
    * Find user by ID
+   * @param {string} userId
+   * @returns {object|null} user object without password or null if not found
    */
   static async findById(userId) {
     const doc = await db().collection(collections.USERS).doc(userId).get();
-    
-    if (!doc.exists) {
-      return null;
-    }
 
-    return {
-      id: doc.id,
-      ...doc.data()
-    };
+    if (!doc.exists) return null;
+
+    return this._sanitizeUser({ id: doc.id, ...doc.data() });
   }
 
   /**
-   * Update user data
+   * Update user data (except password)
+   * @param {string} userId
+   * @param {object} updateData
+   * @returns {object} updated user object without password
    */
   static async update(userId, updateData) {
-    const userRef = db().collection(collections.USERS).doc(userId);
-    
+    // Prevent password update via this method
+    const { password, ...safeUpdateData } = updateData;
+
     const updates = {
-      ...updateData,
-      updatedAt: new Date().toISOString()
+      ...safeUpdateData,
+      updatedAt: new Date().toISOString(),
     };
 
+    const userRef = db().collection(collections.USERS).doc(userId);
     await userRef.update(updates);
-    
-    const updated = await userRef.get();
-    return {
-      id: updated.id,
-      ...updated.data()
-    };
+
+    const updatedDoc = await userRef.get();
+    return this._sanitizeUser({ id: updatedDoc.id, ...updatedDoc.data() });
   }
 
   /**
-   * Verify password
+   * Verify password matches hashed password
+   * @param {string} plainPassword
+   * @param {string} hashedPassword
+   * @returns {boolean} password match
    */
   static async verifyPassword(plainPassword, hashedPassword) {
-    return await bcrypt.compare(plainPassword, hashedPassword);
+    return bcrypt.compare(plainPassword, hashedPassword);
   }
 
   /**
-   * Update password
+   * Update user password securely
+   * @param {string} userId
+   * @param {string} newPassword
    */
   static async updatePassword(userId, newPassword) {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
     await db().collection(collections.USERS).doc(userId).update({
       password: hashedPassword,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     });
   }
 
   /**
-   * Check if user exists
+   * Check if a user exists by email
+   * @param {string} email
+   * @returns {boolean}
    */
   static async exists(email) {
     const user = await this.findByEmail(email);
@@ -129,9 +128,20 @@ export class BaseUser {
   }
 
   /**
-   * Delete user
+   * Delete user by ID
+   * @param {string} userId
    */
   static async delete(userId) {
     await db().collection(collections.USERS).doc(userId).delete();
+  }
+
+  /**
+   * Remove sensitive fields before returning user object
+   * @param {object} userObj
+   * @returns {object} sanitized user object
+   */
+  static _sanitizeUser(userObj) {
+    const { password, ...userWithoutPassword } = userObj;
+    return userWithoutPassword;
   }
 }

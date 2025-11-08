@@ -1,4 +1,4 @@
-import { Task } from '../models/Task.js';
+import { Task } from '../models/task.js';
 import { Event } from '../models/event.js';
 import { NotFoundError, ValidationError, AuthorizationError } from '../middleware/errorHandler.js';
 

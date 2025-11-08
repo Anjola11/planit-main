@@ -4,3 +4,4 @@ serviceAccountKey.json
 *.log
 .DS_Store
 coverage/
+postman.json

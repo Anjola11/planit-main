@@ -1,131 +1,137 @@
-import nodemailer from 'nodemailer';
-import { fileURLToPath } from 'url';
-import path from 'path';
-import ejs from 'ejs';
+import { db, collections } from '../config/firebase.js';
+import bcrypt from 'bcrypt';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Validate essential environment variables early
-const { SMTP_USER, SMTP_PASS } = process.env;
-if (!SMTP_USER || !SMTP_PASS) {
-  throw new Error('SMTP_USER and SMTP_PASS environment variables must be set');
-}
-
-// Create transporter with better timeout and secure TLS settings
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS,
-  },
-  host: 'smtp.gmail.com',
-  port: 587, 
-  secure: false, 
-  requireTLS: true, 
-  debug: true,
-  connectionTimeout: 15000,
-  greetingTimeout: 15000,
-});
-
-// Verify transporter on startup
-transporter.verify((error) => {
-  if (error) {
-    console.error('SMTP Configuration Error:', error);
-  } else {
-    console.log('Email service is ready');
-  }
-});
+// User roles
+export const ROLES = {
+  PLANNER: 'planner',
+  VENDOR: 'vendor',
+  ADMIN: 'admin'
+};
 
 /**
- * Render email template with EJS
+ * Base User class with common functionality
  */
-async function renderTemplate(templateName, payload = {}) {
-  const templatePath = path.join(__dirname, '..', 'templates', `${templateName}.ejs`);
-  try {
-    return await ejs.renderFile(templatePath, payload, { escape: ejs.escapeXML });
-  } catch (err) {
-    console.error(`Error rendering template "${templateName}":`, err);
-    throw err;
-  }
-}
-
-/**
- * General function to send emails
- */
-async function sendEmail(to, subject, html, text) {
-  const message = {
-    from: `Planit <${SMTP_USER}>`,
-    to,
-    subject,
-    html,
-    text,
-  };
-
-  try {
-    await transporter.sendMail(message);
-    console.log(`Email sent to ${to}: ${subject}`);
-    return true;
-  } catch (error) {
-    console.error('Error sending email:', error);
+export class BaseUser {
+  /**
+   * Create a new user in Firestore
+   */
+  static async create(userData) {
+    const { email, password, fullName, role, phoneNumber, profilePicture } = userData;
     
-    return false;
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Base user fields
+    const user = {
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      fullName,
+      role: role || ROLES.PLANNER,
+      phoneNumber: phoneNumber || null,
+      profilePicture: profilePicture || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isActive: true,
+      emailVerified: false
+    };
+
+    const userRef = await db().collection(collections.USERS).add(user);
+    
+    return {
+      id: userRef.id,
+      ...user,
+      password: undefined // Don't return password
+    };
   }
-}
 
-/**
- * Send OTP verification email
- */
-export async function sendOtpEmail(userEmail, otpCode, userName) {
-  const html = await renderTemplate('otp-verification', {
-    username: userName,
-    otpCode,
-    expiryTime: '10 minutes',
-  });
+  /**
+   * Find user by email
+   */
+  static async findByEmail(email) {
+    const snapshot = await db()
+      .collection(collections.USERS)
+      .where('email', '==', email.toLowerCase())
+      .limit(1)
+      .get();
 
-  const textContent = `Hello ${userName},
-Your Planit verification code is: ${otpCode}
-This code will expire in 10 minutes. Please do not share this code with anyone.
-If you didn't request this code, please ignore this email.
-Best regards,
-The Planit Team`;
+    if (snapshot.empty) {
+      return null;
+    }
 
-  return await sendEmail(userEmail, 'Planit - Email Verification Code', html, textContent);
-}
+    const doc = snapshot.docs[0];
+    return {
+      id: doc.id,
+      ...doc.data()
+    };
+  }
 
-/**
- * Send welcome email after successful verification
- */
-export async function sendWelcomeEmail(userEmail, userName) {
-  const html = await renderTemplate('welcome', {
-    username: userName,
-    email: userEmail,
-  });
+  /**
+   * Find user by ID
+   */
+  static async findById(userId) {
+    const doc = await db().collection(collections.USERS).doc(userId).get();
+    
+    if (!doc.exists) {
+      return null;
+    }
 
-  const textContent = `Welcome to Planit, ${userName}!
-Thank you for verifying your email. We're excited to have you on board!
-Planit helps you manage events, tasks, and everything in between. Get started by exploring our features.
-Best regards,
-The Planit Team`;
+    return {
+      id: doc.id,
+      ...doc.data()
+    };
+  }
 
-  return await sendEmail(userEmail, 'Welcome to Planit!', html, textContent);
-}
+  /**
+   * Update user data
+   */
+  static async update(userId, updateData) {
+    const userRef = db().collection(collections.USERS).doc(userId);
+    
+    const updates = {
+      ...updateData,
+      updatedAt: new Date().toISOString()
+    };
 
-/**
- * Send password reset email
- */
-export async function sendPasswordResetEmail(userEmail, resetCode) {
-  const html = await renderTemplate('password-reset', {
-    resetCode,
-    expiryTime: '10 minutes',
-  });
+    await userRef.update(updates);
+    
+    const updated = await userRef.get();
+    return {
+      id: updated.id,
+      ...updated.data()
+    };
+  }
 
-  const textContent = `Hello,
-We received a password reset request for your Planit account.
-Your password reset code is: ${resetCode}
-This code will expire in 10 minutes. If you didn't request this, please ignore this email.
-Best regards,
-The Planit Team`;
+  /**
+   * Verify password
+   */
+  static async verifyPassword(plainPassword, hashedPassword) {
+    return await bcrypt.compare(plainPassword, hashedPassword);
+  }
 
-  return await sendEmail(userEmail, 'Planit - Password Reset Request', html, textContent);
+  /**
+   * Update password
+   */
+  static async updatePassword(userId, newPassword) {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    await db().collection(collections.USERS).doc(userId).update({
+      password: hashedPassword,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Check if user exists
+   */
+  static async exists(email) {
+    const user = await this.findByEmail(email);
+    return user !== null;
+  }
+
+  /**
+   * Delete user
+   */
+  static async delete(userId) {
+    await db().collection(collections.USERS).doc(userId).delete();
+  }
 }

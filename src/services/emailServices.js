@@ -6,23 +6,30 @@ import ejs from 'ejs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create transporter with better timeout settings
+// Validate essential environment variables early
+const { SMTP_USER, SMTP_PASS } = process.env;
+if (!SMTP_USER || !SMTP_PASS) {
+  throw new Error('SMTP_USER and SMTP_PASS environment variables must be set');
+}
+
+// Create transporter with better timeout and secure TLS settings
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: SMTP_USER,
+    pass: SMTP_PASS,
   },
   host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  port: 587, // Use STARTTLS port
+  secure: false, // For port 587, secure should be false to enable STARTTLS
+  requireTLS: true, // Force use of STARTTLS
   debug: true,
   connectionTimeout: 15000,
   greetingTimeout: 15000,
 });
 
 // Verify transporter on startup
-transporter.verify(function (error, success) {
+transporter.verify((error) => {
   if (error) {
     console.error('SMTP Configuration Error:', error);
   } else {
@@ -31,25 +38,24 @@ transporter.verify(function (error, success) {
 });
 
 /**
- * Render email template
+ * Render email template with EJS
  */
 async function renderTemplate(templateName, payload = {}) {
-  const templatePath = path.join(
-    __dirname,
-    '..',
-    'templates',
-    'emails',
-    `${templateName}.ejs`
-  );
-  return ejs.renderFile(templatePath, payload);
+  const templatePath = path.join(__dirname, '..', 'templates', `${templateName}.ejs`);
+  try {
+    return await ejs.renderFile(templatePath, payload, { escape: ejs.escapeXML });
+  } catch (err) {
+    console.error(`Error rendering template "${templateName}":`, err);
+    throw err;
+  }
 }
 
 /**
  * General function to send emails
  */
-export async function sendEmail(to, subject, html, text) {
+async function sendEmail(to, subject, html, text) {
   const message = {
-    from: `Planit <${process.env.SMTP_USER}>`,
+    from: `Planit <${SMTP_USER}>`,
     to,
     subject,
     html,
@@ -62,7 +68,7 @@ export async function sendEmail(to, subject, html, text) {
     return true;
   } catch (error) {
     console.error('Error sending email:', error);
-    // Don't throw error - just log it so signup can continue
+    // Optionally implement retry logic here
     return false;
   }
 }

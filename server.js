@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import app from './src/app.js';
 import { initializeFirebase } from './src/config/firebase.js';
-
+import './src/services/emailServices.js'; 
 
 let server; 
 

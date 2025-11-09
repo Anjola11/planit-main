@@ -40,7 +40,7 @@ async function sendEmail(to, subject, html, text) {
   }
 
   const message = {
-    from: `Planit <${SMTP_USER}>`,
+    from: `Planit <${config.SMTP_USER}>`,
     to,
     subject,
     html,

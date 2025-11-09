@@ -1,21 +1,15 @@
-import nodemailer from 'nodemailer';
+import Brevo from '@getbrevo/brevo';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import ejs from 'ejs';
-import config from "../config/index.js"
+import config from '../config/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const transporter = nodemailer.createTransport({
-  host: config.SMTP_HOST,
-  port: config.SMTP_PORT,
-  secure: false, 
-  auth: {
-    user: config.SMTP_USER,
-    pass: config.SMTP_PASS,
-  },
-});
+// Initialize Brevo API client
+const brevoClient = new Brevo.TransactionalEmailsApi();
+brevoClient.setApiKey(Brevo.TransactionalEmailsApiApiKeys.apiKey, config.BREVO_API_KEY);
 
 /**
  * Render email template with EJS
@@ -25,37 +19,39 @@ async function renderTemplate(templateName, payload = {}) {
   try {
     return await ejs.renderFile(templatePath, payload, { escape: ejs.escapeXML });
   } catch (err) {
-    // FIXED: Changed backtick position
     console.error(`Error rendering template "${templateName}":`, err);
     throw err;
   }
 }
 
 /**
- * General function to send emails
+ * General function to send emails via Brevo API
  */
 async function sendEmail(to, subject, html, text) {
-  // Check if SMTP credentials are configured
-  if (!config.SMTP_USER || !config.SMTP_PASS) {
-    console.warn('Email service not configured. Skipping email to:', to);
+  if (!config.BREVO_API_KEY) {
+    console.warn('Brevo API key not configured. Skipping email to:', to);
     return false;
   }
 
-  const message = {
-    from: `Planit <${config.SMTP_USER}>`,
-    to,
+  const sender = {
+    name: 'Planit',
+    email: 'haleemtunmise@gmail.com', // must be a verified sender in your Brevo account
+  };
+
+  const emailData = {
+    sender,
+    to: [{ email: to }],
     subject,
-    html,
-    text,
+    htmlContent: html,
+    textContent: text,
   };
 
   try {
-    await transporter.sendMail(message);
-    // FIXED: Changed backtick position
-    console.log(`Email sent to ${to}: ${subject}`);
+    await brevoClient.sendTransacEmail(emailData);
+    console.log(`✅ Email sent to ${to}: ${subject}`);
     return true;
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('❌ Error sending email:', error.response?.body || error);
     return false;
   }
 }

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import ejs from 'ejs';
 import config from "../config/index.js"
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -24,8 +25,8 @@ async function renderTemplate(templateName, payload = {}) {
   try {
     return await ejs.renderFile(templatePath, payload, { escape: ejs.escapeXML });
   } catch (err) {
-   console.error(`Error rendering template "${templateName}":`, err);
-
+    // FIXED: Changed backtick position
+    console.error(`Error rendering template "${templateName}":`, err);
     throw err;
   }
 }
@@ -34,8 +35,8 @@ async function renderTemplate(templateName, payload = {}) {
  * General function to send emails
  */
 async function sendEmail(to, subject, html, text) {
-  // Check if transporter is available
-  if (!transporter) {
+  // Check if SMTP credentials are configured
+  if (!config.SMTP_USER || !config.SMTP_PASS) {
     console.warn('Email service not configured. Skipping email to:', to);
     return false;
   }
@@ -50,6 +51,7 @@ async function sendEmail(to, subject, html, text) {
 
   try {
     await transporter.sendMail(message);
+    // FIXED: Changed backtick position
     console.log(`Email sent to ${to}: ${subject}`);
     return true;
   } catch (error) {

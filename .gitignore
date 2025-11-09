@@ -5,3 +5,4 @@ serviceAccountKey.json
 .DS_Store
 coverage/
 postman.json
+testemail.js

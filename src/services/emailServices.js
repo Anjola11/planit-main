@@ -24,7 +24,8 @@ async function renderTemplate(templateName, payload = {}) {
   try {
     return await ejs.renderFile(templatePath, payload, { escape: ejs.escapeXML });
   } catch (err) {
-    console.error(`Error rendering template "${templateName}":`, err);
+   console.error(`Error rendering template "${templateName}":`, err);
+
     throw err;
   }
 }

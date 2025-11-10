@@ -1,171 +1,294 @@
-# 🔐 Authentication API Documentation
+# 📋 Planit API Documentation
 
-## Base URL
-```
-/api/auth
-```
+This documentation provides a comprehensive guide to interacting with the Planit RESTful API, covering authentication, vendor operations, planner workflows, and common utilities.
 
-## Response Format
+## 🔗 Base URL
 
-### Success Response
-```json
-{
-  "success": true,
-  "message": "Message text",
-  "data": { ... }
-}
-```
-
-### Error Response
-```json
-{
-  "success": false,
-  "message": "Error description"
-}
-```
+| Environment | URL |
+| :--- | :--- |
+| **Development** | `http://localhost:5000/api` |
+| **Production** | `https://your-production-url.com/api` |
 
 ---
 
-## 📋 Endpoints
+## 🔒 Authentication
 
-### 1️⃣ User Registration
+Most endpoints require authentication using **JWT Bearer tokens** in the `Authorization` header.
 
-**POST** `/signup`
+| Header | Value |
+| :--- | :--- |
+| `Authorization` | `Bearer <access_token>` |
 
-Register a new user account.
+---
 
-**Access:** Public
+## 📋 Table of Contents
 
-**Request Body:**
+1.  [🔐 Authentication Workflow](#-authentication-workflow)
+2.  [👤 Common Endpoints (Both Roles)](#-common-endpoints-both-roles)
+3.  [🏢 Vendor Workflow](#-vendor-workflow)
+4.  [📅 Planner Workflow](#-planner-workflow)
+    * [Event Management](#event-management)
+    * [Vendor Management in Event](#vendor-management-in-event)
+    * [Task Management](#task-management)
+5.  [🔍 Vendor Discovery (For Planners)](#-vendor-discovery-for-planners)
+6.  [📊 Error Responses](#-error-responses)
+7.  [🔄 Complete Workflow Examples](#-complete-workflow-examples)
+8.  [🎯 Key Notes for Frontend](#-key-notes-for-frontend)
+
+---
+
+## 🔐 Authentication Workflow
+
+### 1. User Signup
+* **Endpoint:** `POST /auth/signup`
+* **Description:** Register a new user (vendor or planner).
+* **Request Body:**
+
 ```json
 {
+  "email": "user@example.com",
+  "password": "SecurePass123",
   "fullName": "John Doe",
-  "email": "john@example.com",
-  "password": "yourPassword123",
-  "phoneNumber": "+2348123456789",
-  "role": "planner"  // Optional: defaults to "planner"
+  "role": "vendor",  // or "planner". Defaults to "planner" if omitted or invalid.
+  "phoneNumber": "+2348012345678"
 }
-```
+````
 
-**Success Response (201):**
+  * **Success Response (201):**
+
+<!-- end list -->
+
 ```json
 {
   "success": true,
-  "message": "User registered successfully",
+  "message": "User registered successfully. Please check your email for verification code.",
   "data": {
-    "user": {
-      "id": "user_id",
-      "email": "john@example.com",
-      "fullName": "John Doe",
-      "role": "planner",
-      "phoneNumber": "+2348123456789"
-    },
-    "accessToken": "JWT_ACCESS_TOKEN",
-    "refreshToken": "JWT_REFRESH_TOKEN"
+    "userId": "abc123xyz",
+    "email": "user@example.com",
+    "role": "vendor",
+    "emailVerified": false
   }
 }
 ```
 
-**Error Responses:**
-- `409` — Email already exists
-- `400` — Validation error
+  * **Notes:** Password must be at least 8 characters with uppercase, lowercase, and number. OTP is sent to the provided email. User is not fully registered until email is verified.
 
----
+-----
 
-### 2️⃣ User Login
+### 2\. Verify Email (OTP)
 
-**POST** `/login`
+  * **Endpoint:** `POST /auth/verify-email`
+  * **Description:** Verify email with OTP code sent during signup.
+  * **Request Body:**
 
-Authenticate an existing user.
+<!-- end list -->
 
-**Access:** Public
-
-**Request Body:**
 ```json
 {
-  "email": "john@example.com",
-  "password": "yourPassword123"
+  "userId": "abc123xyz",
+  "otp": "123456"
 }
 ```
 
-**Success Response (200):**
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "message": "Email verified successfully",
+  "data": {
+    "user": {
+      "id": "abc123xyz",
+      "email": "user@example.com",
+      "fullName": "John Doe",
+      "role": "vendor",
+      "phoneNumber": "+2348012345678",
+      "emailVerified": true
+    },
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+  * **Notes:** OTP expires in 10 minutes. After verification, user receives access and refresh tokens.
+
+-----
+
+### 3\. Resend OTP
+
+  * **Endpoint:** `POST /auth/resend-otp`
+  * **Description:** Resend verification OTP if expired or not received.
+  * **Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "userId": "abc123xyz"
+}
+```
+
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "message": "Verification code sent successfully"
+}
+```
+
+-----
+
+### 4\. Login
+
+  * **Endpoint:** `POST /auth/login`
+  * **Description:** Login existing user.
+  * **Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123"
+}
+```
+
+  * **Success Response (200):**
+
+<!-- end list -->
+
 ```json
 {
   "success": true,
   "message": "Login successful",
   "data": {
     "user": {
-      "id": "user_id",
-      "email": "john@example.com",
+      "id": "abc123xyz",
+      "email": "user@example.com",
       "fullName": "John Doe",
-      "role": "planner",
-      "phoneNumber": "+2348123456789"
+      "role": "vendor",
+      "phoneNumber": "+2348012345678"
     },
-    "accessToken": "JWT_ACCESS_TOKEN",
-    "refreshToken": "JWT_REFRESH_TOKEN"
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
   }
 }
 ```
 
-**Error Responses:**
-- `401` — Invalid email or password
-- `403` — Account deactivated
+-----
 
----
+### 5\. Forgot Password
 
-### 3️⃣ Refresh Token
+  * **Endpoint:** `POST /auth/forgot-password`
+  * **Description:** Request password reset code.
+  * **Request Body:**
 
-**POST** `/refresh`
+<!-- end list -->
 
-Generate a new access token using a valid refresh token.
-
-**Access:** Public
-
-**Request Body:**
 ```json
 {
-  "refreshToken": "JWT_REFRESH_TOKEN"
+  "email": "user@example.com"
 }
 ```
 
-**Success Response (200):**
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "message": "Password reset code sent to your email"
+}
+```
+
+-----
+
+### 6\. Reset Password
+
+  * **Endpoint:** `POST /auth/reset-password`
+  * **Description:** Reset password using code from email.
+  * **Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "email": "user@example.com",
+  "resetCode": "123456",
+  "newPassword": "NewSecurePass123"
+}
+```
+
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "message": "Password reset successfully. Please login with your new password."
+}
+```
+
+-----
+
+### 7\. Refresh Token
+
+  * **Endpoint:** `POST /auth/refresh`
+  * **Description:** Get new access token using refresh token.
+  * **Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+  * **Success Response (200):**
+
+<!-- end list -->
+
 ```json
 {
   "success": true,
   "message": "Token refreshed successfully",
   "data": {
-    "accessToken": "NEW_ACCESS_TOKEN",
-    "refreshToken": "NEW_REFRESH_TOKEN"
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
   }
 }
 ```
 
-**Error Responses:**
-- `401` — Invalid or expired refresh token
+-----
 
----
+### 8\. Logout
 
-### 4️⃣ Logout
+  * **Endpoint:** `POST /auth/logout`
+  * **Authentication:** Required
+  * **Description:** Revokes the specific refresh token used.
+  * **Request Body:**
 
-**POST** `/logout`
+<!-- end list -->
 
-Logout user by revoking the provided refresh token.
-
-**Access:** Private (requires Bearer token)
-
-**Headers:**
-```
-Authorization: Bearer <ACCESS_TOKEN>
-```
-
-**Request Body:**
 ```json
 {
-  "refreshToken": "JWT_REFRESH_TOKEN"
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
 
-**Success Response (200):**
+  * **Success Response (200):**
+
+<!-- end list -->
+
 ```json
 {
   "success": true,
@@ -173,22 +296,17 @@ Authorization: Bearer <ACCESS_TOKEN>
 }
 ```
 
----
+-----
 
-### 5️⃣ Logout All Devices
+### 9\. Logout All Devices
 
-**POST** `/logout-all`
+  * **Endpoint:** `POST /auth/logout-all`
+  * **Authentication:** Required
+  * **Description:** Revokes all refresh tokens for the current user.
+  * **Success Response (200):**
 
-Logout user from all devices (revokes all refresh tokens).
+<!-- end list -->
 
-**Access:** Private
-
-**Headers:**
-```
-Authorization: Bearer <ACCESS_TOKEN>
-```
-
-**Success Response (200):**
 ```json
 {
   "success": true,
@@ -196,99 +314,119 @@ Authorization: Bearer <ACCESS_TOKEN>
 }
 ```
 
----
+-----
 
-### 6️⃣ Get Current User
+## 👤 Common Endpoints (Both Roles)
 
-**GET** `/me`
+### Get Current User Profile
 
-Fetch the authenticated user's profile.
+  * **Endpoint:** `GET /auth/me`
+  * **Authentication:** Required
+  * **Description:** Get the full profile data for the logged-in user, including role-specific fields.
+  * **Success Response (200):**
 
-**Access:** Private
+<!-- end list -->
 
-**Headers:**
-```
-Authorization: Bearer <ACCESS_TOKEN>
-```
-
-**Success Response (200):**
 ```json
 {
   "success": true,
   "data": {
-    "id": "user_id",
-    "email": "john@example.com",
+    "id": "abc123xyz",
+    "email": "user@example.com",
     "fullName": "John Doe",
-    "role": "planner",
-    "phoneNumber": "+2348123456789",
-    "emailVerified": false,
-    "createdAt": "2025-11-05T10:00:00.000Z"
+    "role": "vendor",
+    "phoneNumber": "+2348012345678",
+    "profilePicture": "[https://res.cloudinary.com/xxx/image/upload/](https://res.cloudinary.com/xxx/image/upload/)...",
+    "emailVerified": true,
+    "isActive": true,
+    // ... role-specific fields (e.g., businessName for vendor, bio for planner)
   }
 }
 ```
 
----
+-----
 
-### 7️⃣ Update Profile
+### Update Profile
 
-**PUT** `/profile`
+  * **Endpoint:** `PUT /auth/profile`
+  * **Authentication:** Required
+  * **Description:** Update general or role-specific profile fields.
+  * **Request Body:** (Example for Planner)
 
-Update user profile information.
+<!-- end list -->
 
-**Access:** Private
-
-**Headers:**
-```
-Authorization: Bearer <ACCESS_TOKEN>
-```
-
-**Request Body:**
 ```json
 {
-  "fullName": "John Updated",
-  "phoneNumber": "+2349000000000"
+  "fullName": "Jane Smith",
+  "bio": "Professional event planner with 5 years experience"
 }
 ```
 
-**Success Response (200):**
+  * **Success Response (200):**
+
+<!-- end list -->
+
 ```json
 {
   "success": true,
   "message": "Profile updated successfully",
   "data": {
-    "id": "user_id",
-    "email": "john@example.com",
-    "fullName": "John Updated",
-    "role": "planner",
-    "phoneNumber": "+2349000000000"
+    "id": "abc123xyz",
+    "email": "user@example.com",
+    "fullName": "John Doe Jr.",
+    // ... updated fields
   }
 }
 ```
 
----
+-----
 
-### 8️⃣ Change Password
+### Upload Profile Picture
 
-**PUT** `/change-password`
+  * **Endpoint:** `PUT /auth/profile-picture`
+  * **Authentication:** Required
+  * **Content-Type:** `multipart/form-data`
+  * **Request Body:**
 
-Change the logged-in user's password.
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `profilePicture` | `file` | The image file (max 5MB, JPG, PNG, WEBP). |
 
-**Access:** Private
+  * **Success Response (200):**
 
-**Headers:**
-```
-Authorization: Bearer <ACCESS_TOKEN>
-```
+<!-- end list -->
 
-**Request Body:**
 ```json
 {
-  "currentPassword": "oldPassword123",
-  "newPassword": "newSecurePassword456"
+  "success": true,
+  "message": "Profile picture updated successfully",
+  "data": {
+    "profilePicture": "[https://res.cloudinary.com/xxx/image/upload/v123/user_profiles/abc123.jpg](https://res.cloudinary.com/xxx/image/upload/v123/user_profiles/abc123.jpg)"
+  }
 }
 ```
 
-**Success Response (200):**
+-----
+
+### Change Password
+
+  * **Endpoint:** `PUT /auth/change-password`
+  * **Authentication:** Required
+  * **Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "currentPassword": "OldSecurePass123",
+  "newPassword": "NewSecurePass456"
+}
+```
+
+  * **Success Response (200):**
+
+<!-- end list -->
+
 ```json
 {
   "success": true,
@@ -296,63 +434,473 @@ Authorization: Bearer <ACCESS_TOKEN>
 }
 ```
 
-**Error Responses:**
-- `401` — Incorrect current password
+-----
 
----
+## 🏢 Vendor Workflow
 
-## 🧩 Middleware Summary
+### 1\. Complete Vendor Profile
 
-| Middleware | Purpose | Access |
-|------------|---------|--------|
-| `authenticate` | Verifies access token and attaches user info to `req.user` | Required for private routes |
-| `optionalAuth` | Attaches user if token exists, else continues | Optional |
-| `requireRole('admin')` | Restrict access to admin users | Protected routes |
-| `requirePlanner`, `requireVendor`, etc. | Role-specific short forms | Protected routes |
-| `requireOwnerOrAdmin('userId')` | Allows access if the authenticated user owns the resource or is admin | Protected routes |
+  * **Endpoint:** `PUT /auth/profile`
+  * **Authentication:** Required (Vendor only)
+  * **Description:** Complete vendor profile after email verification.
+  * **Request Body:**
 
----
+<!-- end list -->
 
-## 🧠 Error Handling
-
-| Error Type | HTTP Code | Example Message |
-|------------|-----------|-----------------|
-| `ValidationError` | 400 | Invalid input |
-| `AuthenticationError` | 401 | Invalid or expired token |
-| `AuthorizationError` | 403 | Access denied |
-| `NotFoundError` | 404 | Resource not found |
-| `ConflictError` | 409 | Duplicate entry |
-| `AppError` | 500 | Internal server error |
-
----
-
-## 🧱 User Roles
-
-```javascript
-const { ROLES } = require('../models/User');
-
-ROLES = {
-  ADMIN: 'admin',
-  PLANNER: 'planner',
-  VENDOR: 'vendor'
+```json
+{
+  "businessName": "Elegant Events Photography",
+  "businessDescription": "Professional event photography services with 10+ years experience",
+  "category": "photography",
+  "location": "Lagos, Nigeria",
+  "address": {
+    "street": "123 Marina Street",
+    "city": "Lagos",
+    "state": "Lagos State",
+    "country": "Nigeria",
+    "zipCode": "100001"
+  },
+  "cacNumber": "RC123456",
+  "website": "[https://elegantevents.com](https://elegantevents.com)",
+  "socialMedia": {
+    "facebook": "[https://facebook.com/elegantevents](https://facebook.com/elegantevents)",
+    "instagram": "[https://instagram.com/elegantevents](https://instagram.com/elegantevents)"
+  },
+  "services": ["Wedding Photography", "Corporate Events", "Birthday Shoots"],
+  "priceRange": {
+    "min": 50000,
+    "max": 500000,
+    "currency": "NGN"
+  },
+  "availability": true
 }
 ```
 
----
+  * **Categories:** `catering`, `photography`, `videography`, `venue`, `decoration`, `music`, `entertainment`, `planning`, `other`
 
-## 🔑 Authentication Flow
+-----
 
-1. **Registration/Login** → Receive `accessToken` and `refreshToken`
-2. **API Requests** → Include `Authorization: Bearer <ACCESS_TOKEN>` header
-3. **Token Expiry** → Use `/refresh` endpoint with `refreshToken` to get new tokens
-4. **Logout** → Call `/logout` or `/logout-all` to revoke tokens
+### 2\. Upload CAC Document
 
----
+  * **Endpoint:** `PUT /auth/cac-document`
+  * **Authentication:** Required (Vendor only)
+  * **Content-Type:** `multipart/form-data`
+  * **Request Body:**
 
-## 📝 Notes
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `cacDocument` | `file` | PDF or image file (max 10MB, PDF, JPG, PNG). |
 
-- All timestamps are in ISO 8601 format
-- Access tokens are short-lived (recommended: 15 minutes)
-- Refresh tokens are long-lived (recommended: 7 days)
-- Passwords must meet minimum security requirements
-- Phone numbers should include country code
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "message": "CAC document uploaded successfully",
+  "data": {
+    "cacDocument": "[https://res.cloudinary.com/xxx/image/upload/v123/cac_documents/abc123.pdf](https://res.cloudinary.com/xxx/image/upload/v123/cac_documents/abc123.pdf)"
+  }
+}
+```
+
+-----
+
+### 3\. Upload Portfolio Images
+
+  * **Endpoint:** `POST /auth/portfolio`
+  * **Authentication:** Required (Vendor only)
+  * **Content-Type:** `multipart/form-data`
+  * **Description:** Uploads a single image and adds its URL to the vendor's portfolio array. Call multiple times for multiple images.
+  * **Request Body:**
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `portfolioImage` | `file` | The image file (max 5MB, JPG, PNG, WEBP). |
+
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "message": "Portfolio image uploaded successfully",
+  "data": {
+    "imageUrl": "[https://res.cloudinary.com/xxx/image/upload/v123/vendor_portfolio/abc123.jpg](https://res.cloudinary.com/xxx/image/upload/v123/vendor_portfolio/abc123.jpg)"
+  }
+}
+```
+
+-----
+
+### 4\. Vendor Dashboard Data
+
+  * **Endpoint:** `GET /dashboard/vendor`
+  * **Authentication:** Required (Vendor only)
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "data": {
+    "statistics": {
+      "activeBookings": 5,
+      "pendingBookings": 3,
+      "completedBookings": 12,
+      "activeTasks": 8,
+      "completedTasks": 45
+    },
+    "profileCompletion": {
+      "percentage": 85,
+      "completed": false,
+      "missingFields": ["CAC Document", "Portfolio Images"]
+    },
+    "upcomingEvents": [ /* ... */ ],
+    "recentBookings": [ /* ... */ ]
+  }
+}
+```
+
+-----
+
+### 5\. Get Vendor Bookings
+
+  * **Endpoint:** `GET /dashboard/vendor/bookings`
+  * **Authentication:** Required (Vendor only)
+  * **Query Parameters:** `status` (optional: `pending`, `confirmed`, `declined`)
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "count": 5,
+  "data": [
+    {
+      "id": "event123",
+      "name": "Sarah & John's Wedding",
+      "date": "2025-12-15",
+      "location": "Eko Hotel, Lagos",
+      "vendors": [
+        {
+          "vendorId": "abc123xyz",
+          "status": "confirmed",
+          // ...
+        }
+      ],
+      "status": "in-progress"
+    }
+  ]
+}
+```
+
+-----
+
+### 6\. Update Vendor Booking Status
+
+  * **Endpoint:** `PUT /events/:id/vendors/:vendorId/status`
+  * **Authentication:** Required (Vendor or Planner)
+  * **Description:** Used by the vendor to accept/decline a booking.
+  * **Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "status": "confirmed"  // or "pending", "declined"
+}
+```
+
+-----
+
+### 7\. Update Vendor Availability
+
+  * **Endpoint:** `PUT /dashboard/vendor/availability`
+  * **Authentication:** Required (Vendor only)
+  * **Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "availability": true  // or false
+}
+```
+
+-----
+
+### 8\. Get My Assigned Tasks
+
+  * **Endpoint:** `GET /tasks/my-tasks`
+  * **Authentication:** Required (Any user assigned to a task)
+  * **Query Parameters:** `status` (optional), `completed` (optional: `true` or `false`)
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "count": 3,
+  "data": [
+    {
+      "id": "task123",
+      "title": "Setup photo booth area",
+      "eventId": "event123",
+      "assignedTo": { "userId": "abc123xyz", "userRole": "vendor" },
+      "status": "in-progress",
+      "completed": false
+    }
+  ]
+}
+```
+
+-----
+
+### 9\. Update Task Status (Vendor)
+
+  * **Endpoint:** `PUT /tasks/:id/status`
+  * **Authentication:** Required (Planner or assigned Vendor)
+  * **Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "status": "in-progress"  // pending, in-progress, completed, cancelled
+}
+```
+
+-----
+
+## 📅 Planner Workflow
+
+### Planner Dashboard Data
+
+  * **Endpoint:** `GET /dashboard/planner`
+  * **Authentication:** Required (Planner only)
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "data": {
+    "statistics": {
+      "totalEvents": 25,
+      "activeEvents": 8,
+      "completedEvents": 15,
+      "totalTasks": 120,
+      "activeTasks": 35,
+      "completedTasks": 80,
+      "overdueTasks": 5
+    },
+    "upcomingEvents": [ /* ... */ ],
+    "recentEvents": [ /* ... */ ]
+  }
+}
+```
+
+-----
+
+### Event Management
+
+| Endpoint | Method | Authentication | Description |
+| :--- | :--- | :--- | :--- |
+| **`/events`** | `POST` | `Planner` | **Create Event**. |
+| **`/events`** | `GET` | `Planner` | **Get All Events**. Filters: `status`, `completed`, `eventType`. |
+| **`/events/statistics`** | `GET` | `Planner` | **Get Event Statistics**. |
+| **`/events/search`** | `GET` | `Planner` | **Search Events**. Query: `q` (search term). |
+| **`/events/:id`** | `GET` | `Planner` | **Get Event by ID**. |
+| **`/events/:id`** | `PUT` | `Planner` | **Update Event** details. |
+| **`/events/:id`** | `DELETE` | `Planner` | **Delete Event**. |
+| **`/events/:id/status`** | `PUT` | `Planner` | **Update Event Status**. Body: `{"status": "in-progress"}`. |
+
+  * **Create Event Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "name": "Sarah & John's Wedding",
+  "description": "Outdoor garden wedding ceremony",
+  "date": "2025-12-15",
+  "location": "Eko Hotel, Lagos",
+  "budget": 5000000,
+  "eventType": "wedding",
+  "guestCount": 200
+}
+```
+
+-----
+
+### Vendor Management in Event
+
+| Endpoint | Method | Authentication | Description |
+| :--- | :--- | :--- | :--- |
+| **`/events/:id/vendors`** | `GET` | `Planner` | **Get Event Vendors**. |
+| **`/events/:id/vendors`** | `POST` | `Planner` | **Add Vendor to Event** by Vendor ID. Body: `{"vendorId": "vendor123", "role": "photographer"}`. |
+| **`/events/:id/vendors/by-email`**| `POST` | `Planner` | **Add Vendor to Event** by Email. Body: `{"email": "vendor@example.com"}`. |
+| **`/events/:id/vendors/:vendorId`**| `DELETE` | `Planner` | **Remove Vendor** from Event. |
+
+-----
+
+### Task Management
+
+| Endpoint | Method | Authentication | Description |
+| :--- | :--- | :--- | :--- |
+| **`/events/:eventId/tasks`** | `POST` | `Planner` | **Create Task**. |
+| **`/events/:eventId/tasks/bulk`** | `POST` | `Planner` | **Bulk Create Tasks**. |
+| **`/events/:eventId/tasks`** | `GET` | `Planner/Vendor` | **Get Tasks for Event**. |
+| **`/events/:eventId/tasks/statistics`** | `GET` | `Planner` | **Get Task Statistics** for event. |
+| **`/tasks/:id`** | `GET` | `Planner/Vendor` | **Get Task by ID**. |
+| **`/tasks/:id`** | `PUT` | `Planner` | **Update Task** details. |
+| **`/tasks/:id`** | `DELETE` | `Planner` | **Delete Task**. |
+| **`/tasks/:id/assign`** | `PUT` | `Planner` | **Assign Task** to a user (vendor). |
+| **`/tasks/:id/assign`** | `DELETE` | `Planner` | **Unassign Task**. |
+| **`/tasks/:id/complete`** | `PUT` | `Planner/Vendor` | **Mark Task as Completed**. |
+
+  * **Create Task Request Body:**
+
+<!-- end list -->
+
+```json
+{
+  "title": "Setup photo booth area",
+  "description": "Setup photo booth in the reception hall with props and backdrop",
+  "dueDate": "2025-12-15T12:00:00.000Z",
+  "priority": "high", // low, medium, high, urgent
+  "category": "setup", // general, setup, catering, decoration, etc.
+  "assignedTo": {
+    "userId": "vendor123",
+    "userName": "John Doe",
+    "userEmail": "vendor@example.com",
+    "userRole": "vendor"
+  }
+}
+```
+
+-----
+
+## 🔍 Vendor Discovery (For Planners)
+
+### Get All Vendors
+
+  * **Endpoint:** `GET /vendors`
+  * **Authentication:** Public
+  * **Query Parameters:** `category`, `city`, `state`, `verified`, `availability`
+  * **Success Response (200):** (Returns list of vendor profiles)
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "count": 15,
+  "data": [
+    {
+      "id": "vendor123",
+      "businessName": "Elegant Events Photography",
+      "category": "photography",
+      "location": "Lagos, Nigeria",
+      "rating": 4.5,
+      "verified": true,
+      "availability": true
+      // ... partial vendor details
+    }
+  ]
+}
+```
+
+-----
+
+### Search Vendors
+
+  * **Endpoint:** `GET /vendors/search`
+  * **Authentication:** Public
+  * **Query Parameters:** `q` (required: Search term)
+
+-----
+
+### Get Vendor by ID
+
+  * **Endpoint:** `GET /vendors/:id`
+  * **Authentication:** Public
+  * **Description:** Get full vendor profile, including portfolio and contact info.
+
+-----
+
+### Get Vendor Profile Completion
+
+  * **Endpoint:** `GET /vendors/profile/completion`
+  * **Authentication:** Required (Vendor only)
+  * **Success Response (200):**
+
+<!-- end list -->
+
+```json
+{
+  "success": true,
+  "data": {
+    "percentage": 85,
+    "completed": false,
+    "missingFields": [
+      "CAC Document",
+      "Portfolio Images"
+    ]
+  }
+}
+```
+
+-----
+
+## 📊 Error Responses
+
+All endpoints may return the following standardized error responses:
+
+| Status Code | Error Type | Example Response |
+| :--- | :--- | :--- |
+| **400** | Bad Request (Validation) | `{"success": false, "message": "Validation error message", "errors": [{"field": "email", "message": "Please provide a valid email"}]}` |
+| **401** | Unauthorized | `{"success": false, "message": "Token expired or invalid. Please login again."}` |
+| **403** | Forbidden | `{"success": false, "message": "Access denied. Required role: planner. Your role: vendor"}` |
+| **404** | Not Found | `{"success": false, "message": "Resource not found"}` |
+| **409** | Conflict | `{"success": false, "message": "User with this email already exists"}` |
+| **500** | Internal Server Error | `{"success": false, "message": "Internal server error"}` |
+
+-----
+
+## 🔄 Complete Workflow Examples
+
+### Vendor Complete Flow
+
+1.  **Signup** → `POST /auth/signup` (role: "vendor")
+2.  **Verify Email** → `POST /auth/verify-email` (with OTP)
+3.  **Complete Profile** → `PUT /auth/profile` (business details)
+4.  **Upload Pictures/Docs** → `PUT /auth/profile-picture`, `PUT /auth/cac-document`, `POST /auth/portfolio` (multiple times)
+5.  **View Dashboard** → `GET /dashboard/vendor`
+6.  **Accept/Decline Booking** → `PUT /events/:id/vendors/:vendorId/status`
+7.  **Update Availability** → `PUT /dashboard/vendor/availability`
+
+### Planner Complete Flow
+
+1.  **Signup** → `POST /auth/signup` (role: "planner")
+2.  **Verify Email** → `POST /auth/verify-email` (with OTP)
+3.  **View Dashboard** → `GET /dashboard/planner`
+4.  **Create Event** → `POST /events`
+5.  **Find Vendor** → `GET /vendors/search?q=photography`
+6.  **Add Vendor to Event** → `POST /events/:id/vendors` (or `/by-email`)
+7.  **Create Tasks** → `POST /events/:eventId/tasks/bulk`
+8.  **Assign Tasks** → `PUT /tasks/:id/assign`
+9.  **View Event Details** → `GET /events/:id`
+
+
+<!-- end list -->
+
+```
+```

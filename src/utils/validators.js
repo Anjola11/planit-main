@@ -24,10 +24,6 @@ export const signupValidation = [
     .isIn(Object.values(ROLES))
     .withMessage(`Role must be one of: ${Object.values(ROLES).join(', ')}`),
   
-  body('phoneNumber')
-    .optional()
-    .matches(/^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/)
-    .withMessage('Please provide a valid phone number'),
   
   body('profilePicture')
     .optional()

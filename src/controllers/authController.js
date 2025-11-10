@@ -66,24 +66,19 @@ const verifyOTP = async (userId, otp, type = 'email_verification') => {
  * @access  Public
  */
 export const signup = async (req, res) => {
-    const { email, role, ...userData } = req.body;
-
+    const { email, ...userData } = req.body;  
     // Check if user already exists
     const existingUser = await BaseUser.findByEmail(email);
     if (existingUser) {
         throw new ConflictError('User with this email already exists');
     }
 
-    let user;
-
-    // Create user based on role
-    if (role === ROLES.VENDOR) {
-        user = await Vendor.create({ email, role, ...userData });
-    } else if (role === ROLES.PLANNER || !role) {
-        user = await Planner.create({ email, role, ...userData });
-    } else {
-        throw new ValidationError('Invalid role specified');
-    }
+    // Always create as Planner by default
+    const user = await Planner.create({ 
+        email, 
+        role: ROLES.PLANNER,  // Force planner role
+        ...userData 
+    });
 
     // Generate and send OTP
     const otp = generateOTP();

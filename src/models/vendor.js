@@ -13,7 +13,6 @@ export class Vendor extends BaseUser {
       email,
       password,
       fullName,
-      phoneNumber,
       profilePicture
     } = vendorData;
 
@@ -23,7 +22,6 @@ export class Vendor extends BaseUser {
       password,
       fullName,
       role: ROLES.VENDOR,
-      phoneNumber,
       profilePicture
     });
 
@@ -89,7 +87,6 @@ export class Vendor extends BaseUser {
       'services',
       'priceRange',
       'availability',
-      'phoneNumber',
       'profilePicture',
       'fullName'
     ];
@@ -123,7 +120,6 @@ export class Vendor extends BaseUser {
     // Basic info (20%)
     if (vendor.fullName) score += 5;
     if (vendor.email) score += 5;
-    if (vendor.phoneNumber) score += 5;
     if (vendor.profilePicture) score += 5;
 
     // Business info (30%)

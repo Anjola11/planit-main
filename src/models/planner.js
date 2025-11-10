@@ -13,7 +13,6 @@ export class Planner extends BaseUser {
       email,
       password,
       fullName,
-      phoneNumber,
       profilePicture,
       // Planner-specific fields
       bio,
@@ -27,7 +26,6 @@ export class Planner extends BaseUser {
       password,
       fullName,
       role: ROLES.PLANNER,
-      phoneNumber,
       profilePicture
     });
 
@@ -55,7 +53,6 @@ export class Planner extends BaseUser {
   static async updateProfile(plannerId, updateData) {
     const allowedFields = [
       'fullName',
-      'phoneNumber',
       'profilePicture',
       'bio',
       'preferences'

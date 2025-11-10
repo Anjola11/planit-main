@@ -27,7 +27,6 @@ export class BaseUser {
       password: hashedPassword,
       fullName,
       role: role || ROLES.PLANNER,
-      phoneNumber: phoneNumber || null,
       profilePicture: profilePicture || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

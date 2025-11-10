@@ -26,7 +26,7 @@ export class BaseUser {
       email: email.toLowerCase(),
       password: hashedPassword,
       fullName,
-      role: role || ROLES.PLANNER,
+      role: role,
       profilePicture: profilePicture || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

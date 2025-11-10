@@ -64,25 +64,39 @@ const verifyOTP = async (userId, otp, type = 'email_verification') => {
 };
 
 /**
- * @desc    Register a new user (role-based)
+ * @desc  Register a new user (role-based)
  * @route   POST /api/auth/signup
  * @access  Public
  */
 export const signup = async (req, res) => {
-    const { email, ...userData } = req.body;  
+    // Destructure email and explicitly pull role (which comes from req.body or defaults to PLANNER)
+    const { email, role: requestedRole, ...userData } = req.body; 
+    
+    // Determine the role: if a valid role is requested, use it, otherwise default to PLANNER
+    const finalRole = Object.values(ROLES).includes(requestedRole) ? requestedRole : ROLES.PLANNER;
+
     // Check if user already exists
     const existingUser = await BaseUser.findByEmail(email);
     if (existingUser) {
         throw new ConflictError('User with this email already exists');
     }
 
-    // Always create as Planner by default
-    const user = await Planner.create({ 
-        email, 
-        role: ROLES.PLANNER,  // Force planner role
-        ...userData 
-    });
-
+    // Use the appropriate model (Planner or Vendor) based on the finalRole
+    let user;
+    if (finalRole === ROLES.VENDOR) {
+        user = await Vendor.create({ // Use Vendor model for vendor-specific fields
+            email,
+            role: finalRole,
+            ...userData
+        });
+    } else {
+        user = await Planner.create({ // Use Planner model for planner-specific fields
+            email,
+            role: finalRole,
+            ...userData
+        });
+    }
+    
     // Generate and send OTP
     const otp = generateOTP();
     await storeOTP(user.id, otp);
@@ -94,7 +108,7 @@ export const signup = async (req, res) => {
         data: {
             userId: user.id,
             email: user.email,
-            role: user.role,
+            role: user.role, // This will now reflect the correct role (vendor or planner)
             emailVerified: false
         }
     });

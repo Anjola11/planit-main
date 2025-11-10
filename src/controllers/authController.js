@@ -7,7 +7,7 @@ import { ConflictError, AuthenticationError, NotFoundError, ValidationError } fr
 import { db, collections } from '../config/firebase.js';
 import cloudinary from '../config/cloudinary.js';
 import streamifier from 'streamifier';
-import { BaseUser } from '../models/baseUser.js';
+
 
 /**
  * Generate 6-digit OTP

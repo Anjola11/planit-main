@@ -40,7 +40,6 @@ router.post('/refresh', refreshTokenValidation, validate, asyncHandler(refreshTo
 
 // Protected routes
 // Add this with your protected routes
-router.put('/select-role', authenticate, asyncHandler(selectRole));
 router.post('/logout', authenticate, asyncHandler(logout));
 router.post('/logout-all', authenticate, asyncHandler(logoutAll));
 router.get('/me', authenticate, asyncHandler(getProfile));

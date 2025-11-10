@@ -472,3 +472,122 @@ export const uploadProfilePicture = async (req, res) => {
     res.status(500).json({ success: false, message: 'Upload failed', error: err.message });
   }
 };
+
+
+/**
+ * @desc    Upload CAC document (Vendor only)
+ * @route   PUT /api/auth/cac-document
+ * @access  Private (Vendor only)
+ */
+export const uploadCACDocument = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No document uploaded' });
+  }
+
+  const userId = req.user.id;
+
+  // Verify user is a vendor
+  const user = await BaseUser.findById(userId);
+  if (user.role !== ROLES.VENDOR) {
+    return res.status(403).json({ 
+      success: false, 
+      message: 'Only vendors can upload CAC documents' 
+    });
+  }
+
+  const streamUpload = (buffer) => {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { 
+          folder: 'cac_documents', 
+          resource_type: 'auto', // Accepts images and PDFs
+          format: 'pdf' // Convert to PDF if needed
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      streamifier.createReadStream(buffer).pipe(stream);
+    });
+  };
+
+  try {
+    const uploadResult = await streamUpload(req.file.buffer);
+
+    // Store CAC document URL in Firestore
+    await Vendor.updateProfile(userId, { 
+      cacDocument: uploadResult.secure_url 
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'CAC document uploaded successfully',
+      data: { cacDocument: uploadResult.secure_url }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Upload failed', 
+      error: err.message 
+    });
+  }
+};
+
+
+/**
+ * @desc    Upload portfolio images (Vendor only)
+ * @route   POST /api/auth/portfolio
+ * @access  Private (Vendor only)
+ */
+export const uploadPortfolioImage = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No image uploaded' });
+  }
+
+  const userId = req.user.id;
+
+  // Verify user is a vendor
+  const user = await BaseUser.findById(userId);
+  if (user.role !== ROLES.VENDOR) {
+    return res.status(403).json({ 
+      success: false, 
+      message: 'Only vendors can upload portfolio images' 
+    });
+  }
+
+  const streamUpload = (buffer) => {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'vendor_portfolio', resource_type: 'image' },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      streamifier.createReadStream(buffer).pipe(stream);
+    });
+  };
+
+  try {
+    const uploadResult = await streamUpload(req.file.buffer);
+
+    // Add to vendor portfolio
+    await Vendor.addPortfolioItem(userId, uploadResult.secure_url);
+
+    res.status(200).json({
+      success: true,
+      message: 'Portfolio image uploaded successfully',
+      data: { imageUrl: uploadResult.secure_url }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Upload failed', 
+      error: err.message 
+    });
+  }
+};
+

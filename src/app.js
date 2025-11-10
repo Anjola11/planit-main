@@ -8,6 +8,7 @@ import eventRoutes from './routes/eventRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import eventTaskRoutes from './routes/eventTaskRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 
 const app = express();
 
@@ -79,7 +80,7 @@ app.use('/api/vendors', vendorRoutes);
 app.use('/api/events/:eventId/tasks', eventTaskRoutes); // Nested route for event tasks
 app.use('/api/events', eventRoutes);
 app.use('/api/tasks', taskRoutes);
-
+app.use('/api/dashboard', dashboardRoutes);
 // 404 handler
 app.use(notFound);
 

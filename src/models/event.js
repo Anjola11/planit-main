@@ -104,20 +104,26 @@ export class Event {
     }));
   }
 
-  /**
-   * Get all events where vendor is added
-   */
-  static async getByVendorId(vendorId) {
-    const snapshot = await db()
-      .collection(collections.EVENTS)
-      .where('vendors', 'array-contains-any', [{ vendorId }])
-      .get();
+/**
+ * Get all events where vendor is added
+ */
+static async getByVendorId(vendorId) {
+  // Get all events
+  const snapshot = await db()
+    .collection(collections.EVENTS)
+    .get();
 
-    return snapshot.docs.map(doc => ({
+  // Filter in memory to find events where this vendor is added
+  return snapshot.docs
+    .map(doc => ({
       id: doc.id,
       ...doc.data()
-    }));
-  }
+    }))
+    .filter(event => 
+      event.vendors && 
+      event.vendors.some(v => v.vendorId === vendorId)
+    );
+}
 
   /**
    * Update event

@@ -1,6 +1,9 @@
 import express from 'express';
 import upload from '../middleware/upload.js';
 import { uploadProfilePicture } from '../controllers/authController.js';
+import { requireVendor } from '../middleware/roleCheck.js';
+import { uploadCACDocument, uploadPortfolioImage } from '../controllers/authController.js';
+
 
 import {
   signup,
@@ -56,5 +59,24 @@ router.put(
   asyncHandler(uploadProfilePicture)
 );
 
+
+
+
+
+router.put(
+  '/cac-document',
+  authenticate,
+  requireVendor,
+  upload.single('cacDocument'),
+  asyncHandler(uploadCACDocument)
+);
+
+router.post(
+  '/portfolio',
+  authenticate,
+  requireVendor,
+  upload.single('portfolioImage'),
+  asyncHandler(uploadPortfolioImage)
+);
 
 export default router;

@@ -35,7 +35,7 @@ async function sendEmail(to, subject, html, text) {
 
   const sender = {
     name: 'Planit',
-    email: 'haleemtunmise@gmail.com', // must be a verified sender in your Brevo account
+    email: config.BREVO_EMAIL, 
   };
 
   const emailData = {

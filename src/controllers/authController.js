@@ -5,6 +5,9 @@ import TokenManager from '../utils/tokenManager.js';
 import { sendOtpEmail, sendWelcomeEmail, sendPasswordResetEmail } from '../services/emailServices.js';
 import { ConflictError, AuthenticationError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { db, collections } from '../config/firebase.js';
+import cloudinary from '../config/cloudinary.js';
+import streamifier from 'streamifier';
+import { BaseUser } from '../models/baseUser.js';
 
 /**
  * Generate 6-digit OTP
@@ -411,4 +414,47 @@ export const changePassword = async (req, res) => {
         success: true,
         message: 'Password changed successfully. Please login again.'
     });
+};
+
+
+/**
+ * @desc    Upload or update profile picture
+ * @route   PUT /api/auth/profile-picture
+ * @access  Private
+ */
+export const uploadProfilePicture = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No image uploaded' });
+  }
+
+  const userId = req.user.id;
+
+  const streamUpload = (buffer) => {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'user_profiles', resource_type: 'image' },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      streamifier.createReadStream(buffer).pipe(stream);
+    });
+  };
+
+  try {
+    const uploadResult = await streamUpload(req.file.buffer);
+
+    // Store Cloudinary URL in Firestore
+    await BaseUser.update(userId, { profilePicture: uploadResult.secure_url });
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile picture updated successfully',
+      data: { profilePicture: uploadResult.secure_url }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Upload failed', error: err.message });
+  }
 };

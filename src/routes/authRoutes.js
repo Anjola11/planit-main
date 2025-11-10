@@ -1,4 +1,7 @@
 import express from 'express';
+import upload from '../middleware/upload.js';
+import { uploadProfilePicture } from '../controllers/authController.js';
+
 import {
   signup,
   verifyEmail,
@@ -45,5 +48,13 @@ router.post('/logout-all', authenticate, asyncHandler(logoutAll));
 router.get('/me', authenticate, asyncHandler(getProfile));
 router.put('/profile', authenticate, asyncHandler(updateProfile));
 router.put('/change-password', authenticate, changePasswordValidation, validate, asyncHandler(changePassword));
+
+router.put(
+  '/profile-picture',
+  authenticate,
+  upload.single('profilePicture'),
+  asyncHandler(uploadProfilePicture)
+);
+
 
 export default router;

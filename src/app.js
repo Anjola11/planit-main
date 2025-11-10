@@ -18,9 +18,16 @@ app.use(helmet());
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',') 
-    : '*',
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:5500',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5500',
+    'https://plan-it-sigma-nine.vercel.app',
+    'https://plan-it-git-israel-israel-ekundayos-projects.vercel.app'
+  ],
   credentials: true,
   optionsSuccessStatus: 200
 };

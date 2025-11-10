@@ -7,7 +7,7 @@ This documentation provides a comprehensive guide to interacting with the Planit
 | Environment | URL |
 | :--- | :--- |
 | **Development** | `http://localhost:5000/api` |
-| **Production** | `https://your-production-url.com/api` |
+| **Production** | `https://planit-production-e550.up.railway.app/` |
 
 ---
 
